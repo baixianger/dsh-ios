@@ -2,8 +2,11 @@ import SwiftUI
 
 struct SessionListView: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     private let drawerWidth: CGFloat = 320
+    private var isCompact: Bool { sizeClass == .compact }
+    private var spring: Animation { .spring(response: 0.35, dampingFraction: 0.85) }
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -20,9 +23,7 @@ struct SessionListView: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                                model.showSidebar = true
-                            }
+                            withAnimation(spring) { model.showSidebar.toggle() }
                         } label: {
                             Image(systemName: "sidebar.left")
                                 .font(.system(size: 16, weight: .semibold))
@@ -30,31 +31,30 @@ struct SessionListView: View {
                                 .background(Color.dsSurfaceElevated, in: Circle())
                                 .overlay(Circle().stroke(Color.dsHairline.opacity(0.7), lineWidth: 0.5))
                         }
-                        .accessibilityLabel("打开侧边栏")
+                        .accessibilityLabel("切换侧边栏")
                     }
                 }
                 .toolbarBackground(.hidden, for: .navigationBar)
             }
-            .offset(x: model.showSidebar ? drawerWidth : 0)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: model.showSidebar)
+            // iPhone: 主界面右移让出侧边栏；iPad: 主界面不动，保持可操作。
+            .offset(x: isCompact && model.showSidebar ? drawerWidth : 0)
+            .animation(spring, value: model.showSidebar)
 
-            if model.showSidebar {
+            // iPhone 用遮罩关闭；iPad 无遮罩，主界面可继续操作。
+            if isCompact && model.showSidebar {
                 Color.black.opacity(0.3)
                     .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                            model.showSidebar = false
-                        }
-                    }
+                    .onTapGesture { closeSidebar() }
                     .transition(.opacity)
             }
 
-            SidebarView { id in
-                model.selectConversation(id)
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                    model.showSidebar = false
-                }
-            }
+            SidebarView(
+                onSelectConversation: { id in
+                    model.selectConversation(id)
+                    closeSidebar()
+                },
+                onClose: { closeSidebar() }
+            )
             .frame(width: drawerWidth)
             .frame(maxHeight: .infinity)
             .background(Color.dsBackground)
@@ -62,11 +62,15 @@ struct SessionListView: View {
                 Rectangle().fill(Color.dsHairline.opacity(0.5)).frame(width: 0.5)
             }
             .offset(x: model.showSidebar ? 0 : -drawerWidth)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: model.showSidebar)
+            .animation(spring, value: model.showSidebar)
         }
         .sheet(isPresented: $model.showSettings) { SettingsView() }
         .task {
             await model.boot()
         }
+    }
+
+    private func closeSidebar() {
+        withAnimation(spring) { model.showSidebar = false }
     }
 }

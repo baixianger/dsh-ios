@@ -3,6 +3,7 @@ import SwiftUI
 struct SidebarView: View {
     @EnvironmentObject private var model: AppModel
     let onSelectConversation: (String) -> Void
+    let onClose: () -> Void
 
     @State private var creatingProject = false
     @State private var newProjectPath = ""
@@ -13,97 +14,121 @@ struct SidebarView: View {
     @State private var query = ""
 
     var body: some View {
-        List {
-            Section {
-                Button {
-                    Task { await model.newChat() }
-                } label: {
-                    Label("新建会话", systemImage: "square.and.pencil")
-                        .font(.body.weight(.semibold))
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.dsAccentBlue)
+                Text("DeepSeek Harness")
+                    .font(.headline)
+                Spacer()
+                Button { onClose() } label: {
+                    Image(systemName: "xmark")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("关闭侧边栏")
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
 
-            Section {
-                TextField("搜索会话", text: $query)
-                    .textFieldStyle(.plain)
-                    .autocorrectionDisabled()
+            Divider()
 
-                Button { creatingProject = true } label: {
-                    Label("添加项目", systemImage: "folder.badge.plus")
-                }
-            } header: {
-                Text("工作区")
-            }
-
-            if !query.isEmpty {
+            List {
                 Section {
-                    if searchResults.isEmpty {
-                        Text("没有匹配的会话").font(.caption).foregroundStyle(.secondary)
-                    } else {
-                        ForEach(searchResults) { s in
-                            sessionRow(s, subtitle: projectTitle(for: s.sessionId), indent: false)
-                        }
+                    Button {
+                        Task { await model.newChat() }
+                    } label: {
+                        Label("新建会话", systemImage: "square.and.pencil")
+                            .font(.body.weight(.semibold))
+                    }
+                }
+
+                Section {
+                    TextField("搜索会话", text: $query)
+                        .textFieldStyle(.plain)
+                        .autocorrectionDisabled()
+
+                    Button { creatingProject = true } label: {
+                        Label("添加项目", systemImage: "folder.badge.plus")
                     }
                 } header: {
-                    Text("搜索结果")
+                    Text("工作区")
                 }
-            } else if model.isLoadingSessions && model.workspaces.isEmpty {
-                Section {
-                    ProgressView("加载…")
-                }
-            } else if model.workspaces.isEmpty {
-                Section {
-                    if model.isOffline {
-                        OfflineReminderView()
-                    } else {
-                        Text("暂无项目").foregroundStyle(.secondary)
-                    }
-                }
-            } else {
-                ForEach(model.workspaces) { ws in
+
+                if !query.isEmpty {
                     Section {
-                        let sessions = model.conversations(in: ws.workspaceId)
-                        if sessions.isEmpty {
-                            Text("暂无会话").font(.caption).foregroundStyle(.secondary)
+                        if searchResults.isEmpty {
+                            Text("没有匹配的会话").font(.caption).foregroundStyle(.secondary)
                         } else {
-                            ForEach(sessions) { s in
-                                sessionRow(s)
+                            ForEach(searchResults) { s in
+                                sessionRow(s, subtitle: projectTitle(for: s.sessionId), indent: false)
                             }
                         }
                     } header: {
-                        HStack {
-                            Text(ws.title).textCase(nil)
-                            Spacer()
-                            Menu {
-                                Button("新建会话", systemImage: "square.and.pencil") {
-                                    Task { await model.createSession(workspaceId: ws.workspaceId, agentPreset: nil) }
+                        Text("搜索结果")
+                    }
+                } else if model.isLoadingSessions && model.workspaces.isEmpty {
+                    Section {
+                        ProgressView("加载…")
+                    }
+                } else if model.workspaces.isEmpty {
+                    Section {
+                        if model.isOffline {
+                            OfflineReminderView()
+                        } else {
+                            Text("暂无项目").foregroundStyle(.secondary)
+                        }
+                    }
+                } else {
+                    ForEach(model.workspaces) { ws in
+                        Section {
+                            let sessions = model.conversations(in: ws.workspaceId)
+                            if sessions.isEmpty {
+                                Text("暂无会话").font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                ForEach(sessions) { s in
+                                    sessionRow(s)
                                 }
-                                Button("重命名", systemImage: "pencil") {
-                                    renameText = ws.title
-                                    renameTarget = ws
-                                }
-                                Button("删除", systemImage: "trash", role: .destructive) {
-                                    Task { await model.deleteWorkspace(workspaceId: ws.workspaceId) }
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis.circle").font(.caption)
                             }
-                            .buttonStyle(.plain)
+                        } header: {
+                            HStack {
+                                Text(ws.title).textCase(nil)
+                                Spacer()
+                                Menu {
+                                    Button("新建会话", systemImage: "square.and.pencil") {
+                                        Task { await model.createSession(workspaceId: ws.workspaceId, agentPreset: nil) }
+                                    }
+                                    Button("重命名", systemImage: "pencil") {
+                                        renameText = ws.title
+                                        renameTarget = ws
+                                    }
+                                    Button("删除", systemImage: "trash", role: .destructive) {
+                                        Task { await model.deleteWorkspace(workspaceId: ws.workspaceId) }
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle").font(.caption)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
                     }
                 }
-            }
 
-            Section {
-                Button { model.showSettings = true } label: {
-                    Label("设置", systemImage: "gearshape")
+                Section {
+                    Button { model.showSettings = true } label: {
+                        Label("设置", systemImage: "gearshape")
+                    }
                 }
             }
-        }
-        .listStyle(.sidebar)
-        .refreshable {
-            await model.loadSessions()
-            await model.loadWorkspaces()
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(Color.dsBackground)
+            .refreshable {
+                await model.loadSessions()
+                await model.loadWorkspaces()
+            }
         }
         .sheet(isPresented: $creatingProject) { createProjectSheet }
         .alert("重命名项目", isPresented: Binding(get: { renameTarget != nil }, set: { if !$0 { renameTarget = nil } })) {

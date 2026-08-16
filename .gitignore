@@ -1,5 +1,11 @@
 .build/
+build/
 *.xcodeproj
 DerivedData/
 xcuserdata/
 .DS_Store
+*.log
+fastlane/.env
+fastlane/report.xml
+fastlane/vendor/
+.swiftpm/
