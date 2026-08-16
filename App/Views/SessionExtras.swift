@@ -1,0 +1,702 @@
+import SwiftUI
+
+// MARK: - Stats bar (borrowed from DSH web stats presentation)
+
+struct StatsBar: View {
+    @ObservedObject var model: SessionModel
+
+    var body: some View {
+        let line = Self.line(model.stats, tokenUsage: model.tokenUsage)
+        if !line.isEmpty {
+            Text(line)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 6)
+                .background(.bar)
+        }
+    }
+
+    static func line(_ stats: JSONValue?, tokenUsage: JSONValue?) -> String {
+        guard let stats else { return "" }
+        let turns = stats["turns"]?.double ?? 0
+        let steps = stats["steps"]?.double ?? 0
+        let llmMs = stats["llmMs"]?.double ?? 0
+        let toolMs = stats["toolMs"]?.double ?? 0
+        let ttftMs = stats["ttftMs"]?.double ?? 0
+        let ttftSteps = stats["ttftSteps"]?.double ?? 0
+        let decodeMs = stats["decodeMs"]?.double ?? 0
+        let decodeTokens = stats["decodeTokens"]?.double ?? 0
+        let input = tokenUsage?["uncachedInputTokens"]?.double ?? 0
+        let output = tokenUsage?["outputTokens"]?.double ?? 0
+
+        var parts: [String] = []
+        if turns > 0 || steps > 0 { parts.append("\(Int(turns)) 轮 · \(Int(steps)) 步") }
+        if llmMs > 0 { parts.append("LLM " + fmt(ms: llmMs)) }
+        if toolMs > 0 { parts.append("工具 " + fmt(ms: toolMs)) }
+        if ttftSteps > 0 { parts.append("首token " + fmt(ms: ttftMs / ttftSteps)) }
+        if decodeMs > 0 && decodeTokens > 0 { parts.append(String(format: "%.1f tok/s", decodeTokens / (decodeMs / 1000))) }
+        if input > 0 || output > 0 { parts.append("入 " + fmtTok(input) + " · 出 " + fmtTok(output)) }
+        return parts.joined(separator: " · ")
+    }
+
+    private static func fmt(ms: Double) -> String {
+        if ms < 1000 { return String(format: "%.0fms", ms) }
+        if ms < 60000 { return String(format: "%.1fs", ms / 1000) }
+        return String(format: "%.1fm", ms / 60000)
+    }
+
+    private static func fmtTok(_ n: Double) -> String {
+        if n >= 1000 { return String(format: "%.1fK", n / 1000) }
+        return String(format: "%.0f", n)
+    }
+}
+
+// MARK: - Goal card (create / edit / pause / resume / complete / clear)
+
+struct GoalCard: View {
+    @ObservedObject var model: SessionModel
+    @State private var showEditor = false
+
+    var body: some View {
+        if let goal = model.goal {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "target")
+                        .font(.title3)
+                        .foregroundStyle(.tint)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(goal.objective)
+                            .font(.subheadline.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 6) {
+                            phaseBadge(goal.phase)
+                            Text("\(Int(goal.roundsStarted))/\(Int(goal.maxGoalRounds)) 轮")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let blocked = goal.blockedReason, !blocked.isEmpty {
+                            Text("阻塞原因: \(blocked)")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                    Spacer()
+                }
+
+                if goal.maxGoalRounds > 0 {
+                    ProgressView(value: Double(min(goal.roundsStarted, goal.maxGoalRounds)), total: Double(goal.maxGoalRounds))
+                        .tint(.accentColor)
+                }
+
+                HStack(spacing: 6) {
+                    Button { showEditor = true } label: {
+                        Label("编辑", systemImage: "pencil")
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+
+                    if goal.phase == "active" {
+                        Button("暂停") { Task { await model.pauseGoal() } }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    } else if goal.phase == "paused" {
+                        Button("恢复") { Task { await model.resumeGoal() } }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    }
+                    if goal.phase != "complete" {
+                        Button("完成") { Task { await model.completeGoal() } }
+                            .buttonStyle(.bordered).controlSize(.small)
+                    }
+                    Spacer()
+                    Button(role: .destructive) {
+                        Task { await model.clearGoal() }
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.dsSurfaceSelected, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .sheet(isPresented: $showEditor) {
+                GoalEditorSheet(model: model, editing: goal)
+            }
+        } else {
+            Button {
+                showEditor = true
+            } label: {
+                Label("设定目标", systemImage: "target")
+                    .font(.subheadline)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showEditor) {
+                GoalEditorSheet(model: model, editing: nil)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func phaseBadge(_ phase: String) -> some View {
+        let (label, color) = phaseInfo(phase)
+        Text(label)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(color.opacity(0.15), in: Capsule())
+    }
+
+    private func phaseInfo(_ phase: String) -> (String, Color) {
+        switch phase {
+        case "active": return ("进行中", .green)
+        case "paused": return ("已暂停", .orange)
+        case "blocked": return ("已阻塞", .red)
+        case "complete": return ("已完成", .blue)
+        default: return (phase, .secondary)
+        }
+    }
+}
+
+struct GoalEditorSheet: View {
+    @ObservedObject var model: SessionModel
+    let editing: GoalState?
+    @Environment(\.dismiss) private var dismiss
+    @State private var objective = ""
+    @State private var maxRounds = 5.0
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("目标描述") {
+                    TextField("目标", text: $objective, axis: .vertical)
+                        .lineLimit(2...6)
+                }
+                Section("最大自动轮数") {
+                    Stepper("\(Int(maxRounds)) 轮", value: $maxRounds, in: 1...100)
+                }
+            }
+            .navigationTitle(editing == nil ? "新建目标" : "编辑目标")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        let obj = objective.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !obj.isEmpty else { return }
+                        Task {
+                            if editing != nil {
+                                await model.editGoal(objective: obj, maxGoalRounds: Int(maxRounds))
+                            } else {
+                                await model.createGoal(objective: obj, maxGoalRounds: Int(maxRounds))
+                            }
+                        }
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                if let editing {
+                    objective = editing.objective
+                    maxRounds = Double(editing.maxGoalRounds > 0 ? editing.maxGoalRounds : 5)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Read / diff cards
+
+struct ReadCardView: View {
+    let card: ReadCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "doc.text").font(.caption).foregroundStyle(.secondary)
+                Text(card.label).font(.caption.weight(.medium)).lineLimit(1)
+                Spacer()
+                if let lang = card.lang, !lang.isEmpty {
+                    Text(lang)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.12), in: Capsule())
+                }
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Color.secondary.opacity(0.1))
+            Divider()
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(card.lines.enumerated()), id: \.offset) { _, line in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text(line.number.map { String(Int($0)) } ?? "")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.tertiary)
+                                .frame(minWidth: 28, alignment: .trailing)
+                            Text(line.text)
+                                .font(.caption.monospaced())
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let total = card.totalLines, total > Double(card.lines.count) {
+                Text("显示 \(card.lines.count) / \(Int(total)) 行")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 4)
+            }
+        }
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15), lineWidth: 0.5))
+    }
+}
+
+struct DiffCardView: View {
+    let card: DiffCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(card.diffs.enumerated()), id: \.offset) { _, hunk in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(hunk.path).font(.caption.weight(.medium)).lineLimit(1)
+                    if let old = hunk.oldText, !old.isEmpty {
+                        Text(old).font(.caption.monospaced()).foregroundStyle(.red.opacity(0.8)).textSelection(.enabled)
+                    }
+                    Text(hunk.newText).font(.caption.monospaced()).foregroundStyle(.green.opacity(0.8)).textSelection(.enabled)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15), lineWidth: 0.5))
+    }
+}
+
+// MARK: - Model picker sheet
+
+func effortLabel(_ id: String) -> String {
+    switch id {
+    case "off": return "关闭"
+    case "high": return "高"
+    case "max": return "最高"
+    default: return id
+    }
+}
+
+func permissionName(_ preset: String) -> String {
+    switch preset {
+    case "read-only": return "只读"
+    case "workspace-write": return "可写"
+    case "danger-full-access": return "完全访问"
+    default: return preset
+    }
+}
+
+struct ModelPickerSheet: View {
+    @ObservedObject var model: SessionModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var provider = ""
+    @State private var modelId = ""
+    @State private var effort = "high"
+
+    private var selectedModel: ModelInfo? {
+        model.modelGroups.first(where: { $0.id == provider })?.models.first(where: { $0.id == modelId })
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("模型") {
+                    ForEach(model.modelGroups) { group in
+                        ForEach(group.models) { m in
+                            Button {
+                                provider = group.id
+                                modelId = m.id
+                                if !m.efforts.contains(effort) {
+                                    effort = m.efforts.first ?? ""
+                                }
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(m.name).foregroundStyle(.primary)
+                                        Text(group.name).font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    if provider == group.id && modelId == m.id {
+                                        Image(systemName: "checkmark").foregroundStyle(.tint)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Section("思考强度") {
+                    let efforts = selectedModel?.efforts ?? []
+                    if efforts.isEmpty {
+                        Text("该模型不支持思考强度").font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Picker("思考", selection: $effort) {
+                            ForEach(efforts, id: \.self) { e in
+                                Text(effortLabel(e)).tag(e)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
+            }
+            .navigationTitle("模型")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("应用") {
+                        Task {
+                            await model.selectModel(provider: provider, model: modelId, effort: effort.isEmpty ? nil : effort)
+                        }
+                        dismiss()
+                    }
+                }
+            }
+            .onAppear {
+                provider = model.currentProvider ?? model.modelGroups.first?.id ?? ""
+                modelId = model.currentModelName ?? model.modelGroups.first?.models.first?.id ?? ""
+                effort = model.currentEffort ?? ""
+            }
+        }
+    }
+}
+
+struct StatsSheet: View {
+    @ObservedObject var model: SessionModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if let stats = model.stats {
+                    Section("会话") {
+                        row("轮数", Int(stats["turns"]?.double ?? 0))
+                        row("步骤", Int(stats["steps"]?.double ?? 0))
+                    }
+                    Section("耗时") {
+                        row("LLM", fmtMs(stats["llmMs"]?.double ?? 0))
+                        row("工具", fmtMs(stats["toolMs"]?.double ?? 0))
+                        let ttft = stats["ttftMs"]?.double ?? 0
+                        let ttftSteps = stats["ttftSteps"]?.double ?? 0
+                        if ttftSteps > 0 { row("平均首 token", fmtMs(ttft / ttftSteps)) }
+                        let decodeMs = stats["decodeMs"]?.double ?? 0
+                        let decodeTokens = stats["decodeTokens"]?.double ?? 0
+                        if decodeMs > 0 && decodeTokens > 0 {
+                            row("生成速度", String(format: "%.1f tok/s", decodeTokens / (decodeMs / 1000)))
+                        }
+                    }
+                }
+                if let t = model.tokenUsage {
+                    Section("令牌") {
+                        row("输入", fmtTok(t["uncachedInputTokens"]?.double ?? 0))
+                        row("输出", fmtTok(t["outputTokens"]?.double ?? 0))
+                        row("缓存读取", fmtTok(t["cacheReadTokens"]?.double ?? 0))
+                        row("缓存写入", fmtTok(t["cacheWriteTokens"]?.double ?? 0))
+                        let read = t["cacheReadTokens"]?.double ?? 0
+                        let uncached = t["uncachedInputTokens"]?.double ?? 0
+                        if read + uncached > 0 {
+                            row("缓存命中率", String(format: "%.1f%%", read / (read + uncached) * 100))
+                        }
+                    }
+                }
+                if model.stats == nil && model.tokenUsage == nil {
+                    Text("暂无统计数据").foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("会话统计")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+            }
+        }
+    }
+
+    private func row(_ label: String, _ value: Int) -> some View { row(label, String(value)) }
+    private func row(_ label: String, _ value: String) -> some View {
+        HStack { Text(label).foregroundStyle(.secondary); Spacer(); Text(value) }
+    }
+    private func fmtMs(_ ms: Double) -> String {
+        if ms < 1000 { return String(format: "%.0fms", ms) }
+        if ms < 60000 { return String(format: "%.1fs", ms / 1000) }
+        return String(format: "%.1fm", ms / 60000)
+    }
+    private func fmtTok(_ n: Double) -> String {
+        if n >= 1000 { return String(format: "%.1fK", n / 1000) }
+        return String(format: "%.0f", n)
+    }
+}
+
+// MARK: - Work sheet (jobs + subagents)
+
+struct WorkSheet: View {
+    @ObservedObject var model: SessionModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var exportURL: URL?
+    @State private var showExport = false
+    @State private var promptTarget: SubagentEntry?
+    @State private var promptText = ""
+    @State private var viewingSubagent: SubagentEntry?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("会话") {
+                    Button {
+                        Task {
+                            exportURL = await model.export()
+                            showExport = exportURL != nil
+                        }
+                    } label: {
+                        Label("导出会话日志", systemImage: "square.and.arrow.up")
+                    }
+                }
+
+                Section("后台任务") {
+                    if model.jobs.isEmpty {
+                        Text("无").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(model.jobs) { job in
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(job.label).font(.subheadline)
+                                    if let d = job.detail {
+                                        Text(d).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                    }
+                                }
+                                Spacer()
+                                jobStatus(job.status)
+                            }
+                        }
+                    }
+                }
+                Section("技能") {
+                    if model.skills.isEmpty {
+                        Text("无").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(model.skills) { s in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(s.name).font(.subheadline)
+                                if !s.description.isEmpty {
+                                    Text(s.description).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                                }
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+
+                Section("子代理") {
+                    if model.subagents.isEmpty {
+                        Text("无").foregroundStyle(.secondary)
+                    } else {
+                        ForEach(model.subagents) { sub in
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(sub.label ?? sub.id).font(.subheadline).lineLimit(1)
+                                    Text(sub.isDiagnostic ? (sub.reason ?? "不可用") : sub.mode)
+                                        .font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if sub.activity == "running" {
+                                    ProgressView().controlSize(.small)
+                                }
+                            }
+                            .contextMenu {
+                                if !sub.isDiagnostic {
+                                    Button("查看转写", systemImage: "doc.text") {
+                                        viewingSubagent = sub
+                                    }
+                                }
+                                if sub.mode == "continuable" {
+                                    Button("发消息", systemImage: "paperplane") {
+                                        promptText = ""
+                                        promptTarget = sub
+                                    }
+                                    if sub.activity == "running" {
+                                        Button("中断", systemImage: "stop.fill", role: .destructive) {
+                                            Task { await model.interruptSubagent(childSessionId: sub.id) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("工作")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+            }
+            .alert("给子代理发消息", isPresented: Binding(get: { promptTarget != nil }, set: { if !$0 { promptTarget = nil } })) {
+                TextField("消息", text: $promptText)
+                Button("发送") {
+                    if let t = promptTarget {
+                        Task { await model.promptSubagent(childSessionId: t.id, text: promptText) }
+                    }
+                    promptTarget = nil
+                }
+                Button("取消", role: .cancel) { promptTarget = nil }
+            }
+            .sheet(item: $viewingSubagent) { sub in
+                SubagentHistoryView(model: model, subagentId: sub.id, mode: sub.mode)
+            }
+            .sheet(isPresented: $showExport) {
+                if let url = exportURL {
+                    NavigationStack {
+                        VStack(spacing: 16) {
+                            ShareLink(item: url) {
+                                Label("分享会话日志", systemImage: "square.and.arrow.up")
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 50)
+                                    .background(Color.dsAccentBlue, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                    .foregroundStyle(.white)
+                            }
+                            Text(url.lastPathComponent)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding()
+                        .navigationTitle("导出")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("关闭") { showExport = false }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func jobStatus(_ s: String) -> some View {
+        switch s {
+        case "running": ProgressView().controlSize(.small)
+        case "completed": Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case "failed": Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+        case "killed": Image(systemName: "stop.circle.fill").foregroundStyle(.orange)
+        default: Image(systemName: "circle").foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct SubagentHistoryView: View {
+    @ObservedObject var model: SessionModel
+    let subagentId: String
+    let mode: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var items: [ChatItem] = []
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    if items.isEmpty {
+                        ContentUnavailableView("暂无内容", systemImage: "doc.text")
+                    } else {
+                        ForEach(items) { item in
+                            MessageBubble(item: item)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("子代理转写")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") { dismiss() }
+                }
+            }
+            .task {
+                if let h = await model.loadSubagentHistory(childSessionId: subagentId, mode: mode) {
+                    items = h
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Offline / Tailscale reminder
+
+struct OfflineReminderView: View {
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 46))
+                .foregroundStyle(.secondary)
+            Text("无法连接到 DeepSeek Harness")
+                .font(.headline)
+            Text("本 iPhone 需要在 Tailscale 网络中才能访问运行 DSH 的主机。请确认两端都已安装并登录 Tailscale：")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            VStack(alignment: .leading, spacing: 12) {
+                step(1, "在运行 DSH 的主机（Mac / 服务器）安装并登录 Tailscale")
+                step(2, "在本 iPhone 安装并登录 Tailscale（同一账号）")
+                step(3, "用 tailscale serve 暴露 DSH，再到「设置」把 Base URL 改成 tailnet HTTPS 地址")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 12) {
+                Button {
+                    Task { await model.loadSessions() }
+                } label: {
+                    Label("重试", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button {
+                    model.showSettings = true
+                } label: {
+                    Label("打开设置", systemImage: "gearshape")
+                }
+                .buttonStyle(.bordered)
+            }
+            Spacer()
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func step(_ number: Int, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(number)")
+                .font(.caption.bold())
+                .foregroundStyle(.tint)
+                .frame(width: 22, height: 22)
+                .background(Color.accentColor.opacity(0.14), in: Circle())
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}

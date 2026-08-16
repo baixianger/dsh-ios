@@ -1,0 +1,47 @@
+require 'spaceship'
+
+def with_env_unset(*keys)
+  saved = keys.each_with_object({}) { |k, h| h[k] = ENV.delete(k) }
+  yield
+ensure
+  saved.each { |k, v| ENV[k] = v if v }
+end
+
+def asc_api_key
+  app_store_connect_api_key(
+    key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+    issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
+    key_filepath: ENV["APP_STORE_CONNECT_API_KEY_PATH"],
+    in_house: false
+  )
+end
+
+lane :provision_device do
+  api_key = asc_api_key
+  with_env_unset("APP_STORE_CONNECT_API_KEY_PATH") do
+    Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.from(hash: api_key)
+    begin
+      Spaceship::ConnectAPI::BundleId.create(
+        name: "DshApp",
+        identifier: "com.baixianger.dshios",
+        platform: "IOS"
+      )
+      UI.success("Created App ID com.baixianger.dshios")
+    rescue => e
+      UI.message("App ID may already exist: #{e.message}")
+    end
+
+    register_devices(
+      devices: { "Xiang Bai iPhone" => "00008140-000A4C422EB8801C" },
+      api_key: api_key,
+      team_id: "TN7ZDD72P2"
+    )
+    match(
+      type: "development",
+      app_identifier: "com.baixianger.dshios",
+      api_key: api_key,
+      team_id: "TN7ZDD72P2",
+      force_legacy_encryption: true
+    )
+  end
+end

@@ -1,0 +1,40 @@
+name: DshApp
+options:
+  bundleIdPrefix: com.baixianger
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+targets:
+  DshApp:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Sources/DshClient
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.baixianger.dshios
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+    info:
+      path: App/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        "UISupportedInterfaceOrientations~ipad":
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSMicrophoneUsageDescription: 用于语音输入
+        NSSpeechRecognitionUsageDescription: 用于将语音转换为文字
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+schemes:
+  DshApp:
+    build:
+      targets:
+        DshApp: all
+    run:
+      config: Debug
