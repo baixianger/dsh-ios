@@ -27,22 +27,49 @@ struct SessionDetailView: View {
         return name
     }
 
-    private var groupedItems: [(id: String, items: [ChatItem])] {
-        var result: [(id: String, items: [ChatItem])] = []
-        var run: [ChatItem] = []
-        for item in model.items {
-            if item.role == .tool {
-                run.append(item)
-            } else {
-                if !run.isEmpty {
-                    result.append((id: "tools-" + (run.first?.id ?? ""), items: run))
-                    run = []
+    private struct TimelineGroup: Identifiable {
+        let id: String
+        let message: ChatItem?
+        let reasoning: String?
+        let tools: [ChatItem]
+    }
+
+    private var groupedItems: [TimelineGroup] {
+        var result: [TimelineGroup] = []
+        var index = 0
+
+        while index < model.items.count {
+            let item = model.items[index]
+            if item.role == .assistant,
+               let reasoning = item.reasoning,
+               !reasoning.isEmpty {
+                var tools: [ChatItem] = []
+                var toolIndex = index + 1
+                while toolIndex < model.items.count, model.items[toolIndex].role == .tool {
+                    tools.append(model.items[toolIndex])
+                    toolIndex += 1
                 }
-                result.append((id: item.id, items: [item]))
+                if !tools.isEmpty {
+                    result.append(TimelineGroup(id: "activity-\(item.id)", message: item, reasoning: reasoning, tools: tools))
+                    index = toolIndex
+                    continue
+                }
             }
-        }
-        if !run.isEmpty {
-            result.append((id: "tools-" + (run.first?.id ?? ""), items: run))
+
+            if item.role == .tool {
+                var tools = [item]
+                var toolIndex = index + 1
+                while toolIndex < model.items.count, model.items[toolIndex].role == .tool {
+                    tools.append(model.items[toolIndex])
+                    toolIndex += 1
+                }
+                result.append(TimelineGroup(id: "tools-\(item.id)", message: nil, reasoning: nil, tools: tools))
+                index = toolIndex
+                continue
+            }
+
+            result.append(TimelineGroup(id: item.id, message: item, reasoning: nil, tools: []))
+            index += 1
         }
         return result
     }
@@ -70,11 +97,14 @@ struct SessionDetailView: View {
                         if model.isLoading {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, 24)
                         }
-                        ForEach(groupedItems, id: \.id) { group in
-                            if group.items.count == 1, group.items[0].role != .tool {
-                                messageRow(group.items[0])
-                            } else {
-                                ToolCallGroupCard(items: group.items)
+                        ForEach(groupedItems) { group in
+                            if let message = group.message {
+                                messageRow(message, showsReasoning: group.reasoning == nil)
+                            }
+                            if let reasoning = group.reasoning, !group.tools.isEmpty {
+                                ReasoningToolGroupCard(reasoning: reasoning, items: group.tools)
+                            } else if !group.tools.isEmpty {
+                                ToolCallGroupCard(items: group.tools)
                             }
                         }
                     }
@@ -193,9 +223,10 @@ struct SessionDetailView: View {
     }
 
     @ViewBuilder
-    private func messageRow(_ item: ChatItem) -> some View {
+    private func messageRow(_ item: ChatItem, showsReasoning: Bool = true) -> some View {
         MessageBubble(
             item: item,
+            showsReasoning: showsReasoning,
             feedback: model.feedbackByMessage[item.messageId ?? ""],
             onRemoveMessage: { mid in
                 Task { await model.removeMessage(messageId: mid) }

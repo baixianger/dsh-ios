@@ -3,12 +3,33 @@ import UIKit
 
 struct MessageBubble: View {
     let item: ChatItem
+    let showsReasoning: Bool
     var feedback: MessageFeedbackItem? = nil
     var onRemoveMessage: ((String) -> Void)? = nil
     var onEditMessage: ((String, String) -> Void)? = nil
     var onSteerMessage: ((String) -> Void)? = nil
     var onToggleFeedback: ((String) -> Void)? = nil
     var onEditFeedbackNote: ((String) -> Void)? = nil
+
+    init(
+        item: ChatItem,
+        showsReasoning: Bool = true,
+        feedback: MessageFeedbackItem? = nil,
+        onRemoveMessage: ((String) -> Void)? = nil,
+        onEditMessage: ((String, String) -> Void)? = nil,
+        onSteerMessage: ((String) -> Void)? = nil,
+        onToggleFeedback: ((String) -> Void)? = nil,
+        onEditFeedbackNote: ((String) -> Void)? = nil
+    ) {
+        self.item = item
+        self.showsReasoning = showsReasoning
+        self.feedback = feedback
+        self.onRemoveMessage = onRemoveMessage
+        self.onEditMessage = onEditMessage
+        self.onSteerMessage = onSteerMessage
+        self.onToggleFeedback = onToggleFeedback
+        self.onEditFeedbackNote = onEditFeedbackNote
+    }
 
     var body: some View {
         Group {
@@ -95,7 +116,7 @@ struct MessageBubble: View {
 
     private var assistantBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let reasoning = item.reasoning, !reasoning.isEmpty {
+            if showsReasoning, let reasoning = item.reasoning, !reasoning.isEmpty {
                 ReasoningDisclosure(text: reasoning)
             }
             if item.text.isEmpty {
@@ -268,6 +289,55 @@ struct ToolCallGroupCard: View {
                 Divider()
                 ForEach(items) { item in
                     ToolCallCard(item: item)
+                }
+                .padding(8)
+            }
+        }
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15), lineWidth: 0.5))
+    }
+}
+
+struct ReasoningToolGroupCard: View {
+    let reasoning: String
+    let items: [ChatItem]
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "brain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("思考与工具调用")
+                        .font(.subheadline.weight(.semibold))
+                    Text("· (items.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(10)
+            .accessibilityLabel(expanded ? "收起思考与工具调用" : "展开思考与工具调用")
+
+            if expanded {
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    MarkdownText(text: reasoning)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    ForEach(items) { item in
+                        ToolCallCard(item: item)
+                    }
                 }
                 .padding(8)
             }
