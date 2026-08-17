@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <clipPath id="module">
+      <rect x="20" y="20" width="984" height="984" rx="220"/>
+    </clipPath>
+
+    <clipPath id="whaleClip"><use href="#deepseek-whale"/></clipPath>
+
+    <path id="deepseek-whale" d="M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45"/>
+
+    <radialGradient id="whaleFill" gradientUnits="userSpaceOnUse" cx="7.3" cy="5.1" r="21.8">
+      <stop stop-color="#F4FFFF"/>
+      <stop offset=".3" stop-color="#B7F4FF"/>
+      <stop offset=".67" stop-color="#4BC8FF"/>
+      <stop offset="1" stop-color="#4D6BFE"/>
+    </radialGradient>
+    <radialGradient id="whaleNeon" gradientUnits="userSpaceOnUse" cx="7.4" cy="5.2" r="21.6">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset=".25" stop-color="#C8FBFF"/>
+      <stop offset=".58" stop-color="#53DEFF"/>
+      <stop offset=".82" stop-color="#158DFF"/>
+      <stop offset="1" stop-color="#4D6BFE"/>
+    </radialGradient>
+    <linearGradient id="tube" x1="34" y1="28" x2="980" y2="992" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ECFFFF"/>
+      <stop offset=".2" stop-color="#61ECFF"/>
+      <stop offset=".5" stop-color="#258CFF"/>
+      <stop offset=".78" stop-color="#4D6BFE"/>
+      <stop offset="1" stop-color="#9CF5FF"/>
+    </linearGradient>
+    <linearGradient id="glassWash" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#E7FCFF" stop-opacity=".12"/>
+      <stop offset=".25" stop-color="#91DFFF" stop-opacity=".035"/>
+      <stop offset=".62" stop-color="#294B9A" stop-opacity=".025"/>
+      <stop offset="1" stop-color="#B7EFFF" stop-opacity=".085"/>
+    </linearGradient>
+    <linearGradient id="glassHighlight" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#FFFFFF" stop-opacity=".78"/>
+      <stop offset=".24" stop-color="#CFF8FF" stop-opacity=".2"/>
+      <stop offset=".62" stop-color="#4D6BFE" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#BDF8FF" stop-opacity=".5"/>
+    </linearGradient>
+
+    <!-- Pharos-style inward fluorescence: wide blurred strokes clipped to the module. -->
+    <filter id="innerFar" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="38"/>
+    </filter>
+    <filter id="innerMid" x="-15%" y="-15%" width="130%" height="130%">
+      <feGaussianBlur stdDeviation="20"/>
+    </filter>
+    <filter id="innerNear" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+
+    <!-- SVG approximation of Figma Glass: frost + refraction of the content beneath. -->
+    <filter id="frostedRefraction" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="5.5" result="frost"/>
+      <feTurbulence type="turbulence" baseFrequency=".007 .047" numOctaves="1" seed="67" result="surface"/>
+      <feGaussianBlur in="surface" stdDeviation="1.1 3.4" result="smoothSurface"/>
+      <feDisplacementMap in="frost" in2="smoothSurface" scale="17" xChannelSelector="R" yChannelSelector="G" result="refracted"/>
+      <feColorMatrix in="refracted" type="saturate" values="1.12"/>
+    </filter>
+    <filter id="surfaceNoise" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency=".72" numOctaves="3" seed="91"/>
+      <feColorMatrix values="1 0 0 0 .55
+                             0 1 0 0 .72
+                             0 0 1 0 .9
+                             0 0 0 .055 0"/>
+    </filter>
+    <filter id="rippleSurface" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="turbulence" baseFrequency=".006 .04" numOctaves="1" seed="29"/>
+      <feGaussianBlur stdDeviation="1.3 4.2"/>
+      <feColorMatrix values="1 0 0 0 .45
+                             0 1 0 0 .7
+                             0 0 1 0 1
+                             0 0 0 .09 0"/>
+    </filter>
+    <filter id="whaleRipple" x="-8%" y="-8%" width="116%" height="116%" color-interpolation-filters="sRGB">
+      <feTurbulence type="turbulence" baseFrequency=".018 .13" numOctaves="1" seed="41" result="wave"/>
+      <feGaussianBlur in="wave" stdDeviation=".05 .14" result="smoothWave"/>
+      <feDisplacementMap in="SourceGraphic" in2="smoothWave" scale=".34" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="whaleInnerFar" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation=".72"/>
+    </filter>
+    <filter id="whaleInnerNear" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation=".27"/>
+    </filter>
+
+    <g id="underGlass">
+      <rect x="20" y="20" width="984" height="984" rx="220" fill="#010205"/>
+
+      <g clip-path="url(#module)">
+        <rect x="20" y="20" width="984" height="984" rx="220" fill="none"
+              stroke="#103FAF" stroke-width="190" opacity=".46" filter="url(#innerFar)"/>
+        <rect x="20" y="20" width="984" height="984" rx="220" fill="none"
+              stroke="#166CFF" stroke-width="118" opacity=".5" filter="url(#innerMid)"/>
+        <rect x="20" y="20" width="984" height="984" rx="220" fill="none"
+              stroke="#42DFFF" stroke-width="54" opacity=".54" filter="url(#innerNear)"/>
+        <rect x="24" y="24" width="976" height="976" rx="216" fill="none"
+              stroke="url(#tube)" stroke-width="7"/>
+
+      </g>
+    </g>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#010205"/>
+
+  <!-- Everything visible is below the glass layer. -->
+  <g clip-path="url(#module)">
+    <use href="#underGlass" filter="url(#frostedRefraction)"/>
+    <use href="#underGlass" opacity=".58"/>
+
+    <!-- Internal neon is clipped to the official silhouette, so no light escapes outside. -->
+    <g transform="translate(210 220) scale(25.15)">
+      <g clip-path="url(#whaleClip)">
+        <use href="#deepseek-whale" fill="url(#whaleNeon)" filter="url(#whaleRipple)"/>
+        <use href="#deepseek-whale" fill="none" stroke="#075DFF" stroke-width="1.05"
+             opacity=".64" filter="url(#whaleInnerFar)"/>
+        <use href="#deepseek-whale" fill="none" stroke="#2DDFFF" stroke-width=".58"
+             opacity=".8" filter="url(#whaleInnerNear)"/>
+        <use href="#deepseek-whale" fill="none" stroke="#E6FFFF" stroke-width=".105"/>
+      </g>
+    </g>
+
+    <!-- Translucent glass slab, surface haze, and microscopic frost. -->
+    <rect x="20" y="20" width="984" height="984" rx="220" fill="url(#glassWash)"/>
+    <rect x="20" y="20" width="984" height="984" rx="220" filter="url(#rippleSurface)" opacity=".62" style="mix-blend-mode:soft-light"/>
+    <rect x="20" y="20" width="984" height="984" rx="220" filter="url(#surfaceNoise)" opacity=".58" style="mix-blend-mode:soft-light"/>
+
+    <!-- A restrained reflection that reads as a cover, not an environment glow. -->
+    <path d="M70 122 C292 52 727 42 952 126 L952 280 C716 208 292 216 70 292Z"
+          fill="#E8FCFF" opacity=".035"/>
+  </g>
+
+  <!-- Crisp glass rim and inner highlight live above the frosted content. -->
+  <rect x="23" y="23" width="978" height="978" rx="218" fill="none"
+        stroke="url(#glassHighlight)" stroke-width="5"/>
+  <rect x="38" y="38" width="948" height="948" rx="204" fill="none"
+        stroke="#D7FAFF" stroke-opacity=".14" stroke-width="2"/>
+</svg>

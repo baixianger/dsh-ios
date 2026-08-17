@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1200 1200">
+  <defs>
+    <clipPath id="iosMask">
+      <path d="M0 304 C0 101.8 101.8 0 304 0 H720 C922.2 0 1024 101.8 1024 304 V720 C1024 922.2 922.2 1024 720 1024 H304 C101.8 1024 0 922.2 0 720Z"/>
+    </clipPath>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="28"/>
+      <feOffset dy="24"/>
+      <feColorMatrix values="0 0 0 0 0
+                             0 0 0 0 0
+                             0 0 0 0 0
+                             0 0 0 .52 0"/>
+    </filter>
+    <linearGradient id="wallpaper" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#263044"/>
+      <stop offset=".5" stop-color="#111722"/>
+      <stop offset="1" stop-color="#06080D"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="1200" fill="url(#wallpaper)"/>
+  <g transform="translate(88 72)">
+    <path d="M0 304 C0 101.8 101.8 0 304 0 H720 C922.2 0 1024 101.8 1024 304 V720 C1024 922.2 922.2 1024 720 1024 H304 C101.8 1024 0 922.2 0 720Z"
+          fill="#000" filter="url(#shadow)"/>
+    <image xlink:href="a4-frosted-slab.png" width="1024" height="1024" clip-path="url(#iosMask)"/>
+  </g>
+</svg>

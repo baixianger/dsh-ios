@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DSH App Store screenshots</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { width:100%; min-height:100%; margin:0; }
+    body { overflow:auto; background:#e9e8e4; color:#222222; font-family:-apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Helvetica Neue", sans-serif; }
+    #preview-stage { width:1320px; height:2868px; transform-origin:top left; }
+    body.export { width:1320px; height:2868px; overflow:hidden; background:#fbfbfa; }
+    #canvas { width: 1320px; height: 2868px; position: relative; overflow: hidden; background: #fbfbfa; }
+    #canvas::before { content:""; position:absolute; z-index:0; top:178px; left:58px; width:1204px; height:2508px; border:1px solid #d7d6d1; border-radius:72px; background:#f4f3ef; box-shadow:0 4px 16px rgba(0,0,0,.025); }
+    #canvas::after { content:""; position:absolute; z-index:0; top:178px; right:-1050px; width:1204px; height:2508px; border:1px solid #deddd9; border-radius:72px; background:#f4f3ef; }
+    .eyebrow, .subhead { display:none; }
+    .headline { z-index:1; position: absolute; top: 277px; left: 166px; width: 850px; font-size: 58px; font-weight: 620; letter-spacing: -.04em; line-height: 1.08; color:#252525; }
+    .headline span { color:#747370; font-weight:400; }
+    .mark { display:none; }
+    /* Apple Design Resources: iPhone 17 Pro Max Silver (1520 × 3068).
+       Its 1320 × 2868 display starts 100 px from each edge. */
+    .phone { z-index:1; position:absolute; left:230px; top:680px; width:860px; aspect-ratio:1520 / 3068; }
+    .screen { position:absolute; z-index:1; left:6.57895%; top:3.25945%; width:86.84211%; height:93.48109%; overflow:hidden; border-radius:4.16667% / 1.91841%; background:#000; }
+    .actual-screen { display:block; width:100%; height:100%; object-fit:cover; }
+    .phone-frame { position:absolute; z-index:2; inset:0; width:100%; height:100%; pointer-events:none; user-select:none; }
+    /* Kept as a reusable source asset for future iPad App Store shots. */
+    .ipad-frame { display:none; }
+    body.gallery { background:#f2f1ed; min-height:100vh; padding:32px; }
+    .gallery-header { max-width:1380px; margin:0 auto 26px; display:flex; align-items:end; justify-content:space-between; gap:24px; color:#262626; }
+    .gallery-header h1 { margin:0; font-size:26px; letter-spacing:-.035em; font-weight:650; }
+    .gallery-header p { margin:5px 0 0; font-size:14px; color:#77746f; }
+    .gallery-header nav { display:flex; gap:8px; }
+    .gallery-header a { display:block; padding:8px 11px; border:1px solid #d3d1cc; border-radius:999px; color:#55514d; text-decoration:none; font-size:13px; }
+    .gallery-header a:hover { background:#fff; }
+    .gallery-grid { max-width:1380px; margin:0 auto; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:24px; }
+    .gallery-card { overflow:hidden; border-radius:16px; background:#fff; box-shadow:0 5px 20px rgba(31,29,25,.08); aspect-ratio:1320 / 2868; }
+    .gallery-card iframe { display:block; width:100%; height:100%; border:0; }
+    @media (max-width: 900px) { body.gallery { padding:18px; }.gallery-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; } }
+    .status { height: 105px; display:flex; align-items:center; justify-content:space-between; padding: 22px 52px 0; font-weight:700; font-size: 24px; position:relative; z-index:4; }
+    .muted { color:#8a91a0; } .tiny { font-size: 19px; color:#89909f; } .blue { color:#0a84ff; } .green { color:#37d39a; } .orange { color:#ffb052; }
+    .nav { height:82px; display:flex; align-items:center; padding: 0 44px; font-size:31px; font-weight:650; position:relative; z-index:4; }
+    .nav .back { font-size:48px; font-weight:300; margin-right:25px; color:#e8edf8; } .nav .spacer { flex:1; }
+    .list { margin: 10px 31px; border-radius: 30px; background:#1c1c1f; overflow:hidden; }
+    .row { min-height: 124px; padding: 23px 27px; display:flex; align-items:center; gap:18px; border-bottom: 1px solid rgba(255,255,255,.09); }
+    .row:last-child { border:0; } .row .icon { width:49px; height:49px; border-radius:15px; background:#2b2d33; display:grid; place-items:center; color:#73bdfd; font-size:25px; }
+    .row .grow { flex:1; } .row .title { font-size:28px; font-weight:600; letter-spacing:-.025em; } .row .detail { font-size:20px; color:#9298a6; margin-top:5px; } .chev { color:#717786; font-size:34px; }
+    .tabbar { position:absolute; bottom:24px; left:30px; right:30px; height:116px; background:rgba(35,36,41,.96); border:1px solid rgba(255,255,255,.12); border-radius:35px; display:flex; align-items:center; justify-content:space-around; backdrop-filter:blur(20px); }
+    .tab { text-align:center; font-size:19px; color:#969da9; } .tab strong { display:block; color:#f5f7fb; font-size:31px; line-height:37px; } .tab.active, .tab.active strong { color:#0a84ff; }
+    .welcome { text-align:center; margin-top: 245px; } .whale { width:92px; height:92px; object-fit:contain; border-radius:24px; opacity:.94; } .welcome h2 { margin:18px 0 0; font-size:43px; letter-spacing:-.04em; } 
+    .composer { position:absolute; left:32px; right:32px; bottom:158px; background:#202126; border:1px solid #373940; border-radius:29px; padding:18px 21px; }
+    .composer .prompt { font-size:25px; color:#8a919e; min-height:50px; }.composer .tools { display:flex; align-items:center; gap:15px; margin-top:15px; font-size:19px; color:#c8ced9; }.pill { border-radius:17px; background:#30323a; padding:9px 13px; }.send { margin-left:auto; width:42px; height:42px; border-radius:50%; display:grid; place-items:center; background:#0a84ff; color:white; font-size:23px; }
+    .messages { padding: 8px 34px 180px; }.msg { margin: 24px 0; font-size:26px; line-height:1.35; letter-spacing:-.018em; }.msg.user { background:#2b2d33; padding:19px 22px; border-radius:22px 22px 6px 22px; margin-left:120px; }.msg.agent { margin-right: 45px; }.code { margin-top:14px; background:#16171b; border:1px solid #2d2f36; padding:17px; border-radius:16px; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:19px; color:#b8c9e8; line-height:1.45; }
+    .run-card { margin:18px 30px; padding:25px; border-radius:27px; background:#1d1e23; border:1px solid rgba(255,255,255,.09); }.run-head { display:flex; gap:15px; align-items:center; font-size:26px; font-weight:650; }.dot { width:13px;height:13px;border-radius:50%;background:#37d39a;box-shadow:0 0 18px #37d39a; }.progress {height:10px; border-radius:10px; background:#31343b; margin:23px 0 13px; overflow:hidden;}.progress b {display:block;width:68%;height:100%;background:#0a84ff;border-radius:inherit;}.meta { display:flex; justify-content:space-between; font-size:19px; color:#9198a7; }
+    .permission { margin: 48px 30px; padding:29px; border-radius:28px; background:#1f2025; border:1px solid rgba(74,155,255,.35); }.permission h3 {margin:0 0 12px;font-size:29px;}.permission p {margin:0; font-size:21px; line-height:1.35;color:#aab0bd;}.grant {margin-top:23px;padding:16px 20px;border-radius:17px;background:#0a84ff;font-size:23px;font-weight:650;text-align:center;}
+    .setting-head { padding: 22px 36px 4px; font-size:36px; font-weight:700; }.section { margin:34px 31px 12px; color:#8f96a5; font-size:18px; font-weight:650; letter-spacing:.06em; }.toggle { width:55px;height:33px;border-radius:20px;background:#0a84ff; padding:3px; }.toggle i {display:block;margin-left:22px;width:27px;height:27px;background:#fff;border-radius:50%;}
+    .s6 .headline { top:277px; }
+  </style>
+</head>
+<body>
+  <div id="preview-stage"><main id="canvas"></main></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const previewLocale = params.get('locale') || 'en';
+    const isGallery = !params.has('slide') && params.get('export') !== '1';
+    if (isGallery) {
+      const cards = Array.from({ length: 2 }, (_, index) => '<div class="gallery-card"><iframe title="Screenshot '+(index + 1)+'" src="?slide='+(index + 1)+'&locale='+previewLocale+'"></iframe></div>').join('');
+      document.body.classList.add('gallery');
+      document.body.innerHTML = '<header class="gallery-header"><div><h1>DSH Pocket · App Store screenshots</h1><p>Real SwiftUI captures · iPhone 6.9-inch · 1320 × 2868</p></div><nav><a href="?locale=en">English</a><a href="?locale=zh">中文</a></nav></header><main class="gallery-grid">'+cards+'</main>';
+    } else {
+    const locale = params.get('locale') || 'en';
+    const slide = Number(params.get('slide') || 1);
+    const isExport = params.get('export') === '1';
+    const icon = 'file:///Users/baixianger/personal/dsh-ios/App/Assets.xcassets/AppIcon.appiconset/AppIcon.png';
+    const text = {
+      en: [
+        ['', 'DeepSeek Harness<br><span>in your pocket.</span>', ''],
+        ['', 'Your rules.<br><span>Your permissions.</span>', '']
+      ],
+      zh: [
+        ['', 'DeepSeek Harness<br><span>装进口袋。</span>', ''],
+        ['', '你的规则。<br><span>你的权限。</span>', '']
+      ]
+    };
+    const [eyebrow, headline, subhead] = text[locale][slide - 1];
+    const status = '<div class="status"><span>9:41</span><span>●●● 〰︎ ▰</span></div>';
+    const tab = '<div class="tabbar"><div class="tab active"><strong>▣</strong>'+(locale==='zh'?'会话':'Sessions')+'</div><div class="tab"><strong>⚙</strong>'+(locale==='zh'?'设置':'Settings')+'</div></div>';
+    const row = (i,t,d,tag='›') => '<div class="row"><div class="icon">'+i+'</div><div class="grow"><div class="title">'+t+'</div><div class="detail">'+d+'</div></div><span class="chev">'+tag+'</span></div>';
+    let screen = '';
+    if (slide === 1) screen = status + '<div class="welcome"><img class="whale" src="'+icon+'"><h2>'+ (locale==='zh'?'Into the Unknown':'Into the Unknown') +'</h2></div><div class="composer"><div class="prompt">'+(locale==='zh'?'让 Agent 帮我完成什么？':'What should your agent do?')+'</div><div class="tools"><span class="pill">⌘  '+(locale==='zh'?'选择工作区':'Workspace')+'</span><span class="pill">✦  '+(locale==='zh'?'默认模式':'Default')+'</span><span class="send">↑</span></div></div>'+tab;
+    if (slide === 2) screen = status+'<div class="nav"><span class="back">‹</span><span>'+ (locale==='zh'?'工作区':'Workspaces') +'</span><span class="spacer"></span><span class="blue">＋</span></div><div class="section">'+(locale==='zh'?'已连接的主机':'CONNECTED HOSTS')+'</div><div class="list">'+row('●','office-mac-mini','Tailscale · Online','●')+row('●','production-server','HTTPS · Online','●')+'</div><div class="section">'+(locale==='zh'?'工作区':'WORKSPACES')+'</div><div class="list">'+row('⌘','website-redesign','~/Projects/website-redesign')+row('⌘','ios-release','~/Projects/ios-release')+row('⌘','api-migration','~/Projects/api-migration')+'</div>'+tab;
+    if (slide === 3) screen = status+'<div class="nav"><span>deepseek <small class="muted">HARNESS</small></span><span class="spacer"></span><span>☰</span></div><div class="messages"><div class="msg user">'+(locale==='zh'?'检查 iOS 发布前的待办，并给我一个可执行计划。':'Audit the iOS release checklist and make an actionable plan.')+'</div><div class="msg agent">'+(locale==='zh'?'我会先检查构建、隐私声明与商店素材。':'I’ll check the build, privacy details, and store assets first.')+'<div class="code">$ xcodebuild test<br><span class="green">✓ 42 tests passed</span><br>$ git status --short</div></div><div class="msg agent">'+(locale==='zh'?'已发现 3 个发布前事项，正在整理。':'I found 3 pre-release items and I’m organizing them now.')+'</div></div><div class="composer"><div class="prompt">'+(locale==='zh'?'继续':'Continue')+'</div><div class="tools"><span class="pill">＋</span><span class="pill">◎ GPT-5.6</span><span class="send">↑</span></div></div>';
+    if (slide === 4) screen = status+'<div class="nav"><span class="back">‹</span><span>'+ (locale==='zh'?'发布检查':'Release checklist') +'</span><span class="spacer"></span><span>•••</span></div><div class="run-card"><div class="run-head"><span class="dot"></span><span>'+ (locale==='zh'?'正在检查发布配置':'Checking release configuration') +'</span></div><div class="progress"><b></b></div><div class="meta"><span>'+ (locale==='zh'?'4 / 6 步已完成':'4 of 6 steps complete') +'</span><span>02:18</span></div></div><div class="list">'+row('✓',locale==='zh'?'构建归档':'Build archive',locale==='zh'?'已通过':'Passed','✓')+row('✓',locale==='zh'?'单元测试':'Unit tests',locale==='zh'?'42 项通过':'42 passed','✓')+row('◌',locale==='zh'?'商店截图':'App Store screenshots',locale==='zh'?'正在导出':'Exporting','…')+row('○',locale==='zh'?'提交审核':'Submit for review',locale==='zh'?'等待中':'Waiting','')+'</div><div class="section">LIVE ACTIVITY</div><div class="permission"><h3>'+ (locale==='zh'?'Agent 正在工作':'Your agent is working') +'</h3><p>'+ (locale==='zh'?'完成后会在此会话中通知你。':'You’ll get a notification when it is ready.') +'</p></div>'+tab;
+    if (slide === 5) screen = status+'<div class="setting-head">'+(locale==='zh'?'权限与安全':'Permissions & security')+'</div><div class="section">'+(locale==='zh'?'当前会话':'CURRENT SESSION')+'</div><div class="list">'+row('◉',locale==='zh'?'工作区写入':'Workspace write',locale==='zh'?'允许 Agent 修改此项目':'Allow changes in this workspace','✓')+row('⌁',locale==='zh'?'工具调用确认':'Confirm tool calls',locale==='zh'?'敏感操作前询问':'Ask before sensitive actions','✓')+row('◌',locale==='zh'?'网络访问':'Network access',locale==='zh'?'仅在需要时允许':'Allow when needed','›')+'</div><div class="permission"><h3>'+ (locale==='zh'?'权限始终可见':'Clear, deliberate control') +'</h3><p>'+ (locale==='zh'?'每个 Agent 都在你选定的边界内工作。':'Every agent works within the boundaries you choose.') +'</p><div class="grant">'+(locale==='zh'?'管理预设':'Manage presets')+'</div></div><div class="section">'+(locale==='zh'?'隐私':'PRIVACY')+'</div><div class="list">'+row('⌁',locale==='zh'?'通过 Tailscale 连接':'Connect through Tailscale',locale==='zh'?'你的设备，你的网络':'Your device, your network','')+'</div>'+tab;
+    if (slide === 6) screen = status+'<div class="nav"><span>deepseek <small class="muted">HARNESS</small></span><span class="spacer"></span><span>☰</span></div><div class="section">'+(locale==='zh'?'置顶':'PINNED')+'</div><div class="list">'+row('●',locale==='zh'?'完善 App Store 上架素材':'Polish App Store assets',locale==='zh'?'正在运行 · iOS release':'Working · iOS release','')+row('✓',locale==='zh'?'修复侧栏手势':'Fix sidebar gesture',locale==='zh'?'已完成 · dsh-ios':'Passed · dsh-ios','✓')+'</div><div class="section">'+(locale==='zh'?'今天':'TODAY')+'</div><div class="list">'+row('⌘',locale==='zh'?'审查隐私清单':'Review privacy checklist',locale==='zh'?'准备开始':'Ready to start')+row('⌘',locale==='zh'?'更新发布说明':'Update release notes',locale==='zh'?'需要输入':'Needs input')+'</div><div class="composer"><div class="prompt">'+(locale==='zh'?'开始一个新任务':'Start a new task')+'</div><div class="tools"><span class="pill">＋</span><span class="pill">'+(locale==='zh'?'工作区':'Workspace')+'</span><span class="send">↑</span></div></div>'+tab;
+    document.documentElement.lang = locale === 'zh' ? 'zh-Hans' : 'en';
+    if (isExport) {
+      document.body.classList.add('export');
+    } else {
+      const stage = document.querySelector('#preview-stage');
+      const fit = () => {
+        const scale = Math.min((window.innerWidth - 32) / 1320, (window.innerHeight - 32) / 2868, 1);
+        stage.style.transform = 'translate(16px, 16px) scale(' + scale + ')';
+        document.body.style.height = Math.ceil(2868 * scale + 32) + 'px';
+      };
+      fit();
+      window.addEventListener('resize', fit);
+    }
+    const screenshots = {
+      en: ['raw-screenshots/iphone/01-welcome.png', 'raw-screenshots/iphone/03-settings.png'],
+      zh: ['raw-screenshots/iphone-zh/01-welcome.png', 'raw-screenshots/iphone-zh/03-settings.png']
+    };
+    const screenshotPath = screenshots[locale][slide - 1];
+    document.querySelector('#canvas').className = 's'+slide;
+    document.querySelector('#canvas').innerHTML = '<div class="eyebrow">'+eyebrow+'</div><div class="headline">'+headline+'</div><div class="subhead">'+subhead+'</div><div class="mark"><img src="'+icon+'">DSH</div><div class="phone"><div class="screen"><img class="actual-screen" src="'+screenshotPath+'" alt=""></div><img class="phone-frame" src="assets/iphone-17-pro-max-silver.png" alt=""></div>';
+    }
+  </script>
+</body>
+</html>

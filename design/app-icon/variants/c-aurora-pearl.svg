@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <path id="deepseek-whale" d="M23.748 4.651c-.254-.124-.364.113-.512.233-.051.04-.094.09-.137.137-.372.397-.806.657-1.373.626-.829-.046-1.537.214-2.163.848-.133-.782-.575-1.248-1.247-1.548-.352-.155-.708-.311-.955-.65-.172-.24-.219-.509-.305-.774-.055-.16-.11-.323-.293-.35-.2-.031-.278.136-.356.276-.313.572-.434 1.202-.422 1.84.027 1.436.633 2.58 1.838 3.393.137.094.172.187.129.323-.082.28-.18.553-.266.833-.055.179-.137.218-.328.14a5.5 5.5 0 0 1-1.737-1.179c-.857-.828-1.631-1.743-2.597-2.46a12 12 0 0 0-.689-.47c-.985-.957.13-1.743.387-1.836.27-.098.094-.433-.778-.428-.872.003-1.67.295-2.687.685a3 3 0 0 1-.465.136 9.6 9.6 0 0 0-2.883-.101c-1.885.21-3.39 1.1-4.497 2.622C.082 8.776-.231 10.854.152 13.02c.403 2.284 1.568 4.175 3.36 5.653 1.857 1.533 3.997 2.284 6.438 2.14 1.482-.085 3.132-.284 4.994-1.86.47.234.962.328 1.78.398.629.058 1.235-.031 1.705-.129.735-.155.684-.836.418-.961-2.155-1.004-1.682-.595-2.112-.926 1.095-1.295 2.768-3.598 3.284-6.733.05-.346.115-.834.108-1.114-.004-.171.035-.238.23-.257a4.2 4.2 0 0 0 1.545-.475c1.397-.763 1.96-2.016 2.093-3.517.02-.23-.004-.467-.247-.588M11.58 18.168c-2.088-1.642-3.101-2.183-3.52-2.16-.39.024-.32.472-.234.763.09.288.207.487.371.74.114.167.192.416-.113.603-.673.416-1.842-.14-1.897-.168-1.361-.801-2.5-1.86-3.301-3.306-.775-1.393-1.225-2.888-1.299-4.482-.02-.385.094-.522.477-.592a4.7 4.7 0 0 1 1.53-.038c2.131.311 3.946 1.264 5.467 2.774.868.86 1.525 1.887 2.202 2.89.72 1.066 1.494 2.082 2.48 2.915.348.291.626.513.892.677-.802.09-2.14.109-3.055-.615zm1.001-6.44a.306.306 0 0 1 .415-.287.3.3 0 0 1 .113.074.3.3 0 0 1 .086.214c0 .17-.136.307-.308.307a.303.303 0 0 1-.306-.307m3.11 1.596c-.2.081-.4.151-.591.16a1.25 1.25 0 0 1-.798-.254c-.274-.23-.47-.358-.551-.758a1.7 1.7 0 0 1 .015-.588c.07-.327-.007-.537-.238-.727-.188-.156-.426-.199-.689-.199a.6.6 0 0 1-.254-.078.253.253 0 0 1-.114-.358 1 1 0 0 1 .192-.21c.356-.202.767-.136 1.146.016.352.144.618.408 1.001.782.392.451.462.576.685.915.176.264.336.536.446.848.066.194-.02.353-.25.45"/>
+    <clipPath id="tile"><rect x="20" y="20" width="984" height="984" rx="220"/></clipPath>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#031020"/><stop offset=".48" stop-color="#052E56"/><stop offset="1" stop-color="#101044"/></linearGradient>
+    <radialGradient id="aqua"><stop stop-color="#B9FFFF"/><stop offset=".3" stop-color="#4FE6FF" stop-opacity=".92"/><stop offset="1" stop-color="#1B8BFF" stop-opacity="0"/></radialGradient>
+    <radialGradient id="violet"><stop stop-color="#B794FF"/><stop offset=".34" stop-color="#775BFF" stop-opacity=".8"/><stop offset="1" stop-color="#4D6BFE" stop-opacity="0"/></radialGradient>
+    <radialGradient id="pearl" gradientUnits="userSpaceOnUse" cx="6.7" cy="4.8" r="21.6"><stop stop-color="#FFFFFF"/><stop offset=".28" stop-color="#D6FBFF"/><stop offset=".65" stop-color="#79E6FF"/><stop offset="1" stop-color="#5A7DFF"/></radialGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#FFFFFF" stop-opacity=".9"/><stop offset=".5" stop-color="#8FEFFF" stop-opacity=".16"/><stop offset="1" stop-color="#B7A7FF" stop-opacity=".74"/></linearGradient>
+    <filter id="field" x="-35%" y="-35%" width="170%" height="170%"><feGaussianBlur stdDeviation="66"/></filter>
+    <filter id="env" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="38"/></filter>
+    <filter id="far" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="2.7"/></filter>
+    <filter id="near" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation=".82"/></filter>
+    <filter id="depth" x="-25%" y="-25%" width="150%" height="150%"><feDropShadow dx="0" dy=".7" stdDeviation=".76" flood-color="#020621" flood-opacity=".72"/><feDropShadow dx="0" dy="-.15" stdDeviation=".22" flood-color="#FFFFFF" flood-opacity=".6"/></filter>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".8" numOctaves="3" seed="43"/><feColorMatrix values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 .12 0"/></filter>
+  </defs>
+  <rect width="1024" height="1024" fill="#06070D"/>
+  <rect x="72" y="55" width="880" height="915" rx="210" fill="#5ADFFF" opacity=".31" filter="url(#env)"/>
+  <g clip-path="url(#tile)">
+    <rect x="20" y="20" width="984" height="984" fill="url(#base)"/>
+    <ellipse cx="200" cy="110" rx="500" ry="420" fill="url(#aqua)" filter="url(#field)"/>
+    <ellipse cx="920" cy="185" rx="500" ry="430" fill="url(#violet)" filter="url(#field)"/>
+    <ellipse cx="90" cy="900" rx="480" ry="450" fill="url(#violet)" filter="url(#field)"/>
+    <ellipse cx="925" cy="860" rx="500" ry="450" fill="url(#aqua)" filter="url(#field)"/>
+    <path d="M-90 500 C188 360 335 399 505 489 C687 586 840 578 1110 405 L1110 675 C870 808 687 775 514 683 C342 592 164 602 -90 744Z" fill="#71EDFF" opacity=".28" filter="url(#field)"/>
+    <ellipse cx="510" cy="508" rx="370" ry="310" fill="#03132C" opacity=".72"/>
+    <rect x="20" y="20" width="984" height="984" filter="url(#grain)" opacity=".48" style="mix-blend-mode:soft-light"/>
+    <g transform="translate(196 206) scale(26.25)">
+      <use href="#deepseek-whale" fill="#6DEBFF" opacity=".7" filter="url(#far)"/>
+      <use href="#deepseek-whale" fill="#B9F8FF" opacity=".84" filter="url(#near)"/>
+      <use href="#deepseek-whale" fill="url(#pearl)" stroke="#E7FFFF" stroke-width=".13" filter="url(#depth)"/>
+    </g>
+    <rect x="24" y="24" width="976" height="976" rx="216" fill="none" stroke="url(#edge)" stroke-width="8"/>
+    <rect x="40" y="40" width="944" height="944" rx="202" fill="none" stroke="#FFFFFF" stroke-opacity=".12" stroke-width="3"/>
+  </g>
+</svg>
