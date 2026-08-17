@@ -31,10 +31,24 @@ targets:
         NSSpeechRecognitionUsageDescription: 用于将语音转换为文字
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+  DshAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+    dependencies:
+      - target: DshApp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
 schemes:
   DshApp:
     build:
       targets:
         DshApp: all
+        DshAppTests: [test]
+    test:
+      targets:
+        - DshAppTests
     run:
       config: Debug

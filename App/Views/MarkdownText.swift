@@ -21,6 +21,7 @@ struct MarkdownText: View {
                 blockView(block)
             }
         }
+        .textSelection(.enabled)
     }
 
     private enum Block {

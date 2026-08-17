@@ -60,68 +60,95 @@ struct StatsBar: View {
 struct GoalCard: View {
     @ObservedObject var model: SessionModel
     @State private var showEditor = false
+    @State private var expanded = false
 
     var body: some View {
         if let goal = model.goal {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "target")
-                        .font(.title3)
-                        .foregroundStyle(.tint)
-                    VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        expanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: phaseIcon(goal.phase))
+                            .foregroundStyle(phaseColor(goal.phase))
+                        Text(phaseLabel(goal.phase))
+                            .font(.caption.weight(.semibold))
                         Text(goal.objective)
-                            .font(.subheadline.weight(.semibold))
-                            .fixedSize(horizontal: false, vertical: true)
-                        HStack(spacing: 6) {
-                            phaseBadge(goal.phase)
-                            Text("\(Int(goal.roundsStarted))/\(Int(goal.maxGoalRounds)) 轮")
-                                .font(.caption)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        if goal.maxGoalRounds > 0 {
+                            Text("\(Int(goal.roundsStarted))/\(Int(goal.maxGoalRounds))")
+                                .font(.caption.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
+                        Image(systemName: expanded ? "chevron.down" : "chevron.up")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 36)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("目标，\(phaseLabel(goal.phase))，\(goal.objective)")
+                .accessibilityValue(goal.maxGoalRounds > 0 ? "第 \(Int(goal.roundsStarted)) 轮，共 \(Int(goal.maxGoalRounds)) 轮" : "")
+
+                if expanded {
+                    Divider()
+                        .padding(.horizontal, 12)
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(goal.objective)
+                            .font(.subheadline)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if goal.maxGoalRounds > 0 {
+                            ProgressView(
+                                value: Double(min(goal.roundsStarted, goal.maxGoalRounds)),
+                                total: Double(goal.maxGoalRounds)
+                            )
+                            .tint(.accentColor)
+                        }
+
                         if let blocked = goal.blockedReason, !blocked.isEmpty {
-                            Text("阻塞原因: \(blocked)")
+                            Label(blocked, systemImage: "exclamationmark.triangle")
                                 .font(.caption)
                                 .foregroundStyle(.orange)
                         }
-                    }
-                    Spacer()
-                }
 
-                if goal.maxGoalRounds > 0 {
-                    ProgressView(value: Double(min(goal.roundsStarted, goal.maxGoalRounds)), total: Double(goal.maxGoalRounds))
-                        .tint(.accentColor)
-                }
-
-                HStack(spacing: 6) {
-                    Button { showEditor = true } label: {
-                        Label("编辑", systemImage: "pencil")
+                        HStack(spacing: 8) {
+                            Button("编辑", systemImage: "pencil") { showEditor = true }
+                            if goal.phase == "active" {
+                                Button("暂停") { Task { await model.pauseGoal() } }
+                            } else if goal.phase == "paused" {
+                                Button("恢复") { Task { await model.resumeGoal() } }
+                            }
+                            if goal.phase != "complete" {
+                                Button("完成") { Task { await model.completeGoal() } }
+                            }
+                            Spacer()
+                            Button("清除", systemImage: "trash", role: .destructive) {
+                                Task { await model.clearGoal() }
+                            }
+                        }
+                        .font(.caption)
+                        .buttonStyle(.borderless)
                     }
-                    .buttonStyle(.bordered).controlSize(.small)
-
-                    if goal.phase == "active" {
-                        Button("暂停") { Task { await model.pauseGoal() } }
-                            .buttonStyle(.bordered).controlSize(.small)
-                    } else if goal.phase == "paused" {
-                        Button("恢复") { Task { await model.resumeGoal() } }
-                            .buttonStyle(.bordered).controlSize(.small)
-                    }
-                    if goal.phase != "complete" {
-                        Button("完成") { Task { await model.completeGoal() } }
-                            .buttonStyle(.bordered).controlSize(.small)
-                    }
-                    Spacer()
-                    Button(role: .destructive) {
-                        Task { await model.clearGoal() }
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.red)
+                    .padding(12)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(Color.dsSurfaceSelected, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.secondary.opacity(0.14), lineWidth: 0.5)
+            )
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
             .sheet(isPresented: $showEditor) {
                 GoalEditorSheet(model: model, editing: goal)
             }
@@ -130,35 +157,50 @@ struct GoalCard: View {
                 showEditor = true
             } label: {
                 Label("设定目标", systemImage: "target")
-                    .font(.subheadline)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 34)
+                    .background(.thinMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(Color.secondary.opacity(0.14), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
             .sheet(isPresented: $showEditor) {
                 GoalEditorSheet(model: model, editing: nil)
             }
         }
     }
 
-    @ViewBuilder
-    private func phaseBadge(_ phase: String) -> some View {
-        let (label, color) = phaseInfo(phase)
-        Text(label)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(color)
-            .padding(.horizontal, 6).padding(.vertical, 2)
-            .background(color.opacity(0.15), in: Capsule())
+    private func phaseLabel(_ phase: String) -> String {
+        switch phase {
+        case "active": return "正在推进"
+        case "paused": return "已暂停"
+        case "blocked": return "已阻塞"
+        case "complete": return "已完成"
+        default: return phase
+        }
     }
 
-    private func phaseInfo(_ phase: String) -> (String, Color) {
+    private func phaseColor(_ phase: String) -> Color {
         switch phase {
-        case "active": return ("进行中", .green)
-        case "paused": return ("已暂停", .orange)
-        case "blocked": return ("已阻塞", .red)
-        case "complete": return ("已完成", .blue)
-        default: return (phase, .secondary)
+        case "active": return .green
+        case "paused": return .orange
+        case "blocked": return .red
+        case "complete": return .blue
+        default: return .secondary
+        }
+    }
+
+    private func phaseIcon(_ phase: String) -> String {
+        switch phase {
+        case "active": return "target"
+        case "paused": return "pause.circle"
+        case "blocked": return "exclamationmark.triangle"
+        case "complete": return "checkmark.circle"
+        default: return "target"
         }
     }
 }
@@ -310,7 +352,7 @@ struct ModelPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var provider = ""
     @State private var modelId = ""
-    @State private var effort = "high"
+    @State private var effort = ""
 
     private var selectedModel: ModelInfo? {
         model.modelGroups.first(where: { $0.id == provider })?.models.first(where: { $0.id == modelId })
@@ -325,14 +367,21 @@ struct ModelPickerSheet: View {
                             Button {
                                 provider = group.id
                                 modelId = m.id
-                                if !m.efforts.contains(effort) {
-                                    effort = m.efforts.first ?? ""
-                                }
+                                // Match DSH Web: choosing a model adopts that exact
+                                // model's declared default. No reasoning metadata means
+                                // no synthetic effort is submitted.
+                                effort = m.reasoning?.defaultEffort ?? ""
                             } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 1) {
                                         Text(m.name).foregroundStyle(.primary)
                                         Text(group.name).font(.caption2).foregroundStyle(.secondary)
+                                        if let description = m.description, !description.isEmpty {
+                                            Text(description)
+                                                .font(.caption2)
+                                                .foregroundStyle(.tertiary)
+                                                .lineLimit(2)
+                                        }
                                     }
                                     Spacer()
                                     if provider == group.id && modelId == m.id {
@@ -344,17 +393,24 @@ struct ModelPickerSheet: View {
                     }
                 }
 
-                Section("思考强度") {
-                    let efforts = selectedModel?.efforts ?? []
-                    if efforts.isEmpty {
-                        Text("该模型不支持思考强度").font(.caption).foregroundStyle(.secondary)
-                    } else {
+                if let reasoning = selectedModel?.reasoning {
+                    Section("思考强度") {
                         Picker("思考", selection: $effort) {
-                            ForEach(efforts, id: \.self) { e in
-                                Text(effortLabel(e)).tag(e)
+                            if reasoning.defaultEffort == nil {
+                                Text("提供商默认").tag("")
+                            }
+                            ForEach(reasoning.efforts) { level in
+                                Text(level.name).tag(level.id)
                             }
                         }
-                        .pickerStyle(.segmented)
+                        .pickerStyle(.navigationLink)
+
+                        if let selected = reasoning.efforts.first(where: { $0.id == effort }),
+                           let description = selected.description, !description.isEmpty {
+                            Text(description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }
@@ -374,7 +430,10 @@ struct ModelPickerSheet: View {
             .onAppear {
                 provider = model.currentProvider ?? model.modelGroups.first?.id ?? ""
                 modelId = model.currentModelName ?? model.modelGroups.first?.models.first?.id ?? ""
-                effort = model.currentEffort ?? ""
+                let currentModel = model.modelGroups
+                    .first(where: { $0.id == provider })?
+                    .models.first(where: { $0.id == modelId })
+                effort = model.currentEffort ?? currentModel?.reasoning?.defaultEffort ?? ""
             }
         }
     }

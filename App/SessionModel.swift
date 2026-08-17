@@ -7,11 +7,19 @@ final class SessionModel: ObservableObject {
     private let client: DshClient
 
     var summary: SessionSummary?
-    @Published var items: [ChatItem] = []
+    @Published var items: [ChatItem] = [] {
+        didSet { transcriptEntries = TranscriptBuilder.build(from: items) }
+    }
+    @Published private(set) var transcriptEntries: [TranscriptEntry] = []
     @Published var isLoading = false
     @Published var historyError: String?
     @Published var isRunning = false
     @Published var sendError: String?
+    @Published var commandError: String?
+    @Published private(set) var commands: [SessionCommand] = []
+    @Published private(set) var permissionPreset: String?
+    @Published var permissionError: String?
+    @Published var operationError: String?
 
     @Published var modelGroups: [ModelGroup] = []
     @Published var currentProvider: String?
@@ -26,8 +34,12 @@ final class SessionModel: ObservableObject {
     @Published var tokenUsage: JSONValue?
     @Published var planActive = false
     @Published var feedbackByMessage: [String: MessageFeedbackItem] = [:]
+    @Published private(set) var trajectoryRecords: [TrajectoryRecord] = []
+    @Published private(set) var trajectoryHasMore = false
+    @Published private(set) var isLoadingOlderTrajectory = false
 
     private var streamingItemID: String?
+    private var trajectoryEntries: [JSONValue] = []
 
     private var sessionCwd: String? { summary?.cwd }
 
@@ -47,17 +59,64 @@ final class SessionModel: ObservableObject {
         do {
             let value = try await client.call("session.history", payload: .object(["sessionId": .string(sessionId)]))
             items = Self.foldHistory(value, sessionCwd: sessionCwd)
+            trajectoryEntries = value["events"]?.array ?? []
+            trajectoryRecords = TrajectoryBuilder.build(trajectoryEntries)
+            trajectoryHasMore = value["hasMore"]?.bool ?? false
             await hydrateImages()
             if let values = value["projections"]?["values"] {
                 stats = values["sessionStats"]
                 tokenUsage = values["tokenUsage"]
                 goal = values["goal"].flatMap { GoalState(json: $0) }
                 planActive = values["plan"]?["active"]?.bool ?? false
+                permissionPreset = values["permission"]?["preset"]?.string ?? values["permission"]?["value"]?.string
             }
             historyError = nil
         } catch {
             historyError = String(describing: error)
         }
+    }
+
+    func loadCommands() async {
+        do {
+            let value = try await client.callRemote("commands", "list", args: .object(["agentId": .string(sessionId)]))
+            let raw = value["commands"]?.array ?? value["items"]?.array ?? value.array ?? []
+            commands = raw.compactMap { SessionCommand(json: $0) }
+            commandError = nil
+        } catch {
+            commandError = String(describing: error)
+        }
+    }
+
+    func setPermission(_ preset: String) async {
+        do {
+            try await executeCommandLine("/permission \(preset)")
+            permissionPreset = preset
+            permissionError = nil
+        } catch {
+            permissionError = String(describing: error)
+        }
+    }
+
+    func loadOlderTrajectory() async {
+        guard trajectoryHasMore, !isLoadingOlderTrajectory,
+              let beforeSeq = trajectoryEntries.first?["event"]?["seq"]?.double else { return }
+        isLoadingOlderTrajectory = true
+        defer { isLoadingOlderTrajectory = false }
+        do {
+            let value = try await client.call("session.history", payload: .object([
+                "sessionId": .string(sessionId),
+                "beforeSeq": .number(beforeSeq),
+                "maxMessages": .number(50),
+            ]))
+            let older = value["events"]?.array ?? []
+            let known = Set(trajectoryEntries.compactMap { $0["event"]?["seq"]?.double })
+            trajectoryEntries = older.filter { entry in
+                guard let seq = entry["event"]?["seq"]?.double else { return true }
+                return !known.contains(seq)
+            } + trajectoryEntries
+            trajectoryRecords = TrajectoryBuilder.build(trajectoryEntries)
+            trajectoryHasMore = value["hasMore"]?.bool ?? false
+        } catch {}
     }
 
     func loadModels() async {
@@ -82,7 +141,10 @@ final class SessionModel: ObservableObject {
             currentProvider = value["selected"]?["provider"]?.string ?? provider
             currentModelName = value["selected"]?["model"]?.string ?? model
             currentEffort = value["selected"]?["reasoningEffort"]?.string ?? effort
-        } catch {}
+            operationError = nil
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     func loadSubagentHistory(childSessionId: String, mode: String) async -> [ChatItem]? {
@@ -106,7 +168,10 @@ final class SessionModel: ObservableObject {
                 "mode": .string("continuable"),
                 "content": .array([.object(["type": .string("text"), "text": .string(text)])]),
             ]))
-        } catch {}
+            operationError = nil
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     func interruptSubagent(childSessionId: String) async {
@@ -116,7 +181,10 @@ final class SessionModel: ObservableObject {
                 "childSessionId": .string(childSessionId),
                 "mode": .string("continuable"),
             ]))
-        } catch {}
+            operationError = nil
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     func loadSkills() async {
@@ -162,40 +230,13 @@ final class SessionModel: ObservableObject {
         }
     }
 
-    func editMessage(messageId: String, text: String) async {
-        do {
-            let _ = try await client.call("session.updateQueue", payload: .object([
-                "sessionId": .string(sessionId),
-                "itemId": .string(messageId),
-                "action": .object(["kind": .string("edit"), "content": .array([.object(["type": .string("text"), "text": .string(text)])])]),
-            ]))
-        } catch {}
-    }
-
-    func steerMessage(messageId: String) async {
-        do {
-            let _ = try await client.call("session.updateQueue", payload: .object([
-                "sessionId": .string(sessionId),
-                "itemId": .string(messageId),
-                "action": .object(["kind": .string("steer")]),
-            ]))
-        } catch {}
-    }
-
-    func removeMessage(messageId: String) async {
-        do {
-            let _ = try await client.call("session.updateQueue", payload: .object([
-                "sessionId": .string(sessionId),
-                "itemId": .string(messageId),
-                "action": .object(["kind": .string("remove")]),
-            ]))
-        } catch {}
-    }
-
     func cancel() async {
         do {
             let _ = try await client.call("session.cancel", payload: .object(["sessionId": .string(sessionId)]))
-        } catch {}
+            operationError = nil
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     func send(_ text: String, image: (data: String, mediaType: String)? = nil) async {
@@ -208,6 +249,21 @@ final class SessionModel: ObservableObject {
             content.append(.object(["type": .string("text"), "text": .string(text)]))
         }
         guard !content.isEmpty else { return }
+        if image == nil, trimmed.hasPrefix("/") {
+            guard commands.contains(where: { command in
+                trimmed == "/" + command.name || trimmed.hasPrefix("/" + command.name + " ")
+            }) else {
+                sendError = "未知命令：\(trimmed.split(separator: " ").first.map(String.init) ?? trimmed)"
+                return
+            }
+            do {
+                try await executeCommandLine(trimmed)
+                sendError = nil
+            } catch {
+                sendError = String(describing: error)
+            }
+            return
+        }
         do {
             let _ = try await client.call("session.prompt", payload: .object([
                 "sessionId": .string(sessionId),
@@ -218,6 +274,13 @@ final class SessionModel: ObservableObject {
         } catch {
             sendError = String(describing: error)
         }
+    }
+
+    private func executeCommandLine(_ line: String) async throws {
+        _ = try await client.callRemote("commands", "execute", args: .object([
+            "agentId": .string(sessionId),
+            "line": .string(line),
+        ]))
     }
 
     // MARK: feedback
@@ -232,7 +295,9 @@ final class SessionModel: ObservableObject {
                 if let f = MessageFeedbackItem(json: item) { map[f.messageId] = f }
             }
             feedbackByMessage = map
-        } catch {}
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     func toggleFeedback(messageId: String, rating: String) async {
@@ -266,10 +331,14 @@ final class SessionModel: ObservableObject {
             let value = try await client.callRemote("messageFeedback", "put", args: .object(["request": .object(request)]))
             if value["ok"]?.bool == true, let item = value["value"], let f = MessageFeedbackItem(json: item) {
                 feedbackByMessage[messageId] = f
+                operationError = nil
             } else if value["ok"]?.bool == false {
                 await loadFeedback()
+                operationError = value["error"]?.prettyPrinted ?? String(localized: "反馈操作失败")
             }
-        } catch {}
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     private func deleteFeedback(messageId: String, ifVersion: String) async {
@@ -281,10 +350,14 @@ final class SessionModel: ObservableObject {
             ])]))
             if value["ok"]?.bool == true {
                 feedbackByMessage.removeValue(forKey: messageId)
+                operationError = nil
             } else if value["ok"]?.bool == false {
                 await loadFeedback()
+                operationError = value["error"]?.prettyPrinted ?? String(localized: "反馈操作失败")
             }
-        } catch {}
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     // MARK: goals
@@ -292,7 +365,12 @@ final class SessionModel: ObservableObject {
     func createGoal(objective: String, maxGoalRounds: Int? = nil) async {
         var payload: [String: JSONValue] = ["sessionId": .string(sessionId), "objective": .string(objective)]
         if let maxGoalRounds { payload["maxGoalRounds"] = .number(Double(maxGoalRounds)) }
-        do { let _ = try await client.call("goal.create", payload: .object(payload)) } catch {}
+        do {
+            let _ = try await client.call("goal.create", payload: .object(payload))
+            operationError = nil
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     func editGoal(objective: String, maxGoalRounds: Int?) async {
@@ -300,7 +378,12 @@ final class SessionModel: ObservableObject {
         let ref = JSONValue.object(["id": .string(goal.id), "revision": .number(goal.revision)])
         var payload: [String: JSONValue] = ["sessionId": .string(sessionId), "ref": ref, "objective": .string(objective)]
         if let maxGoalRounds { payload["maxGoalRounds"] = .number(Double(maxGoalRounds)) }
-        do { let _ = try await client.call("goal.edit", payload: .object(payload)) } catch {}
+        do {
+            let _ = try await client.call("goal.edit", payload: .object(payload))
+            operationError = nil
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     func pauseGoal() async { await goalAction("goal.pause") }
@@ -313,7 +396,10 @@ final class SessionModel: ObservableObject {
         let ref = JSONValue.object(["id": .string(goal.id), "revision": .number(goal.revision)])
         do {
             let _ = try await client.call(method, payload: .object(["sessionId": .string(sessionId), "ref": ref]))
-        } catch {}
+            operationError = nil
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     // MARK: live updates
@@ -336,6 +422,16 @@ final class SessionModel: ObservableObject {
         let type = event["type"]?.string
         let data = event["data"] ?? .null
         let seq = event["seq"]?.double ?? 0
+        if !trajectoryEntries.contains(where: { $0["event"]?["seq"]?.double == seq }) {
+            var entry: [String: JSONValue] = ["event": event]
+            if let view { entry["view"] = view }
+            trajectoryEntries.append(.object(entry))
+            // Streaming deltas arrive every few milliseconds. Keep the lossless source,
+            // but only rebuild the ledger when a structural/final event arrives.
+            if type != "assistant/chunk" {
+                trajectoryRecords = TrajectoryBuilder.build(trajectoryEntries)
+            }
+        }
         switch type {
         case "user/message":
             if data["source"]?["kind"]?.string == "user" {

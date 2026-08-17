@@ -3,13 +3,38 @@ import Combine
 
 @MainActor
 final class AppModel: ObservableObject {
+    enum MainPresentation: Equatable {
+        case blank
+        case welcome
+        case workspace
+        case conversation
+    }
     var baseURLString: String {
         didSet {
+            guard baseURLString != oldValue else { return }
             UserDefaults.standard.set(baseURLString, forKey: "dshBaseURL")
             client = DshClient(baseURL: URL(string: baseURLString) ?? URL(string: "http://127.0.0.1:3080")!)
+
+            // Every one of these collections is scoped to a DSH host. Keeping
+            // them when the URL changes makes Presets/Models look incomplete
+            // because the UI is actually showing the previous host's cache.
+            eventTask?.cancel()
+            openSessions.removeAll()
+            sessions = []
+            workspaces = []
+            archivedSessionIds = []
+            agentPresets = []
+            providers = []
+            credentials = []
+            modelCatalog = []
+            plugins = []
+            pendingApprovals = []
+            pendingQuestions = []
+            selectedWorkspaceId = nil
+            selectedConversationId = nil
+            mainPresentation = .welcome
             Task {
-                await loadSessions()
-                startEvents()
+                await boot()
             }
         }
     }
@@ -22,11 +47,16 @@ final class AppModel: ObservableObject {
     @Published var isOffline = false
     @Published var showSettings = false
     @Published var showSidebar = false
+    @Published var showNewChatDestination = false
+    @Published var mainPresentation: MainPresentation = .welcome
 
     @Published var pendingApprovals: [ApprovalWait] = []
     @Published var pendingQuestions: [QuestionWait] = []
 
     @Published var workspaces: [Workspace] = []
+    /// The host keeps archived sessions in the workspace projection even after
+    /// they have been removed from the visible session list.
+    @Published private(set) var archivedSessionIds: Set<String> = []
     @Published var selectedWorkspaceId: String?
     @Published var selectedConversationId: String?
     @Published var lastConversationByProject: [String: String] = [:]
@@ -36,6 +66,8 @@ final class AppModel: ObservableObject {
     @Published var credentials: [CredentialView] = []
     @Published var modelCatalog: [ModelGroup] = []
     @Published var plugins: [PluginEntry] = []
+    @Published var settingsError: String?
+    @Published var operationError: String?
     @Published var discoveredHosts: [DiscoveredHost] = []
     @Published var isDiscovering = false
     @Published var permissionPreset: String?
@@ -43,14 +75,27 @@ final class AppModel: ObservableObject {
 
     private var openSessions: [String: SessionModel] = [:]
     private var eventTask: Task<Void, Never>?
+    /// Used only by the App Store capture scheme. It never reaches a host and
+    /// is activated explicitly with `--store-screenshot-demo <screen>`.
+    private let storeScreenshotDemoScreen: String?
 
     init() {
-        let stored = UserDefaults.standard.string(forKey: "dshBaseURL") ?? "http://127.0.0.1:3080"
+        let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "--store-screenshot-demo"), arguments.indices.contains(index + 1) {
+            storeScreenshotDemoScreen = arguments[index + 1]
+        } else {
+            storeScreenshotDemoScreen = nil
+        }
+        let stored = storeScreenshotDemoScreen == nil
+            ? (UserDefaults.standard.string(forKey: "dshBaseURL") ?? "http://127.0.0.1:3080")
+            : "https://harness-demo.tailnet"
         self.baseURLString = stored
         self.client = DshClient(baseURL: URL(string: stored) ?? URL(string: "http://127.0.0.1:3080")!)
+        if storeScreenshotDemoScreen != nil { seedStoreScreenshotDemo() }
     }
 
     func boot() async {
+        guard storeScreenshotDemoScreen == nil else { return }
         await loadSessions()
         await loadWorkspaces()
         await loadAgentPresets()
@@ -76,17 +121,17 @@ final class AppModel: ObservableObject {
         } catch {}
     }
 
-    func removeAgentPreset(preset: String) async {
+    func setDefaultAgentPreset(_ preset: String) async {
         do {
-            let _ = try await client.call("agentPreset.remove", payload: .object(["agentPreset": .string(preset)]))
+            _ = try await client.call("settings.update", payload: .object([
+                "ns": .string("agent-presets"),
+                "patch": .object(["default": .string(preset)]),
+            ]))
             await loadAgentPresets()
-        } catch {}
-    }
-
-    func selectAgentPreset(sessionId: String, preset: String) async {
-        do {
-            let _ = try await client.call("agentPreset.select", payload: .object(["sessionId": .string(sessionId), "agentPreset": .string(preset)]))
-        } catch {}
+            settingsError = nil
+        } catch {
+            settingsError = String(describing: error)
+        }
     }
 
     func loadProviders() async {
@@ -109,17 +154,31 @@ final class AppModel: ObservableObject {
     }
 
     func setCredential(ref: String, value: String) async {
+        guard credentials.first(where: { $0.name == ref })?.writable == true else {
+            settingsError = String(localized: "此凭证由主机管理，不能从远端修改")
+            return
+        }
         do {
             let _ = try await client.call("credentials.set", payload: .object(["ref": .string(ref), "value": .string(value)]))
             await loadCredentials()
-        } catch {}
+            settingsError = nil
+        } catch {
+            settingsError = String(describing: error)
+        }
     }
 
     func unsetCredential(ref: String) async {
+        guard credentials.first(where: { $0.name == ref })?.writable == true else {
+            settingsError = String(localized: "此凭证由主机管理，不能从远端修改")
+            return
+        }
         do {
             let _ = try await client.call("credentials.unset", payload: .object(["ref": .string(ref)]))
             await loadCredentials()
-        } catch {}
+            settingsError = nil
+        } catch {
+            settingsError = String(describing: error)
+        }
     }
 
     func loadModelCatalog() async {
@@ -147,11 +206,20 @@ final class AppModel: ObservableObject {
     func loadWorkspaces() async {
         do {
             let value = try await client.call("workspace.list")
-            workspaces = (value["items"]?.array ?? []).compactMap { Workspace(json: $0) }
+            let projection = WorkspaceListProjection(json: value)
+            workspaces = projection.workspaces
+            archivedSessionIds = projection.archivedSessionIds
+            if let selectedConversationId, archivedSessionIds.contains(selectedConversationId) {
+                self.selectedConversationId = nil
+                mainPresentation = .workspace
+            }
             if selectedWorkspaceId == nil || !workspaces.contains(where: { $0.workspaceId == selectedWorkspaceId }) {
                 selectedWorkspaceId = workspaces.first?.workspaceId
             }
-        } catch {}
+        } catch {
+            // Refresh failures are intentionally non-fatal; mutation callers
+            // still receive the original RPC error below.
+        }
     }
 
     func createSession(workspaceId: String?, agentPreset: String?) async -> String? {
@@ -162,6 +230,7 @@ final class AppModel: ObservableObject {
             let value = try await client.call("session.create", payload: .object(payload))
             let id = value["sessionId"]?.string
             await loadSessions()
+            await loadWorkspaces()
             if let id {
                 selectedConversationId = id
                 if let workspaceId {
@@ -176,86 +245,121 @@ final class AppModel: ObservableObject {
     }
 
     func conversations(in projectId: String) -> [SessionSummary] {
+        conversations(in: projectId, order: .lastUpdated)
+    }
+
+    enum SessionOrder {
+        case manual
+        case lastUpdated
+    }
+
+    func conversations(in projectId: String, order: SessionOrder) -> [SessionSummary] {
         guard let ws = workspaces.first(where: { $0.workspaceId == projectId }) else { return [] }
-        return sessions
-            .filter { ws.sessionIds.contains($0.sessionId) }
-            .sorted { $0.updatedAt > $1.updatedAt }
+        let visible = sessions.filter {
+            ws.sessionIds.contains($0.sessionId) && !$0.blank && !archivedSessionIds.contains($0.sessionId)
+        }
+        switch order {
+        case .lastUpdated:
+            return visible.sorted { $0.updatedAt > $1.updatedAt }
+        case .manual:
+            return ws.sessionIds.compactMap { id in visible.first { $0.sessionId == id } }
+        }
     }
 
     func selectProject(_ id: String?) {
         selectedWorkspaceId = id
         selectedConversationId = id.flatMap { lastConversationByProject[$0] }
+        mainPresentation = selectedConversationId == nil ? .workspace : .conversation
     }
 
     func selectConversation(_ id: String) {
+        guard !archivedSessionIds.contains(id) else { return }
         selectedConversationId = id
+        mainPresentation = .conversation
         if let ws = workspaces.first(where: { $0.sessionIds.contains(id) }) {
             selectedWorkspaceId = ws.workspaceId
             lastConversationByProject[ws.workspaceId] = id
         }
     }
 
-    func newChat() async {
-        let pid = selectedWorkspaceId ?? workspaces.first?.workspaceId
-        _ = await createSession(workspaceId: pid, agentPreset: nil)
+    func newChat(workspaceId: String? = nil) {
+        selectedWorkspaceId = workspaceId ?? selectedWorkspaceId ?? workspaces.first?.workspaceId
+        selectedConversationId = nil
+        mainPresentation = .workspace
     }
 
-    func renameSession(sessionId: String, title: String) async {
-        do {
-            let _ = try await client.call("session.rename", payload: .object(["sessionId": .string(sessionId), "title": .string(title)]))
-            await loadSessions()
-        } catch {}
+    func showWelcome() {
+        mainPresentation = .welcome
     }
 
-    func archiveSession(sessionId: String) async {
-        do {
-            let _ = try await client.call("workspace.archiveSession", payload: .object(["sessionId": .string(sessionId)]))
-            await loadSessions()
-        } catch {}
+    func requestNewChatDestination() {
+        showNewChatDestination = true
+    }
+
+    func renameSession(sessionId: String, title: String) async throws {
+        let _ = try await client.call("session.rename", payload: .object(["sessionId": .string(sessionId), "title": .string(title)]))
+        await loadSessions()
+        await loadWorkspaces()
+    }
+
+    func archiveSession(sessionId: String) async throws {
+        let _ = try await client.call("workspace.archiveSession", payload: .object(["sessionId": .string(sessionId)]))
+        await loadWorkspaces()
+        await loadSessions()
+        if selectedConversationId == sessionId {
+            selectedConversationId = nil
+            mainPresentation = .workspace
+        }
     }
 
     func forkSession(sessionId: String) async {
         do {
-            let _ = try await client.call("session.fork", payload: .object(["sessionId": .string(sessionId)]))
+            let value = try await client.call("session.fork", payload: .object(["sessionId": .string(sessionId)]))
             await loadSessions()
-        } catch {}
-    }
-
-    func createWorkspace(path: String) async -> String? {
-        do {
-            let value = try await client.call("workspace.create", payload: .object(["path": .string(path)]))
-            let wid = value["workspace"]?["workspaceId"]?.string
-            await loadWorkspaces()
-            if let wid {
-                selectedWorkspaceId = wid
-                selectedConversationId = nil
+            if let forkedId = value["sessionId"]?.string ?? value["id"]?.string {
+                selectConversation(forkedId)
             }
-            return wid
+            operationError = nil
         } catch {
-            return nil
+            operationError = String(describing: error)
         }
     }
 
-    func renameWorkspace(workspaceId: String, title: String) async {
-        do {
-            let _ = try await client.call("workspace.rename", payload: .object(["workspaceId": .string(workspaceId), "title": .string(title)]))
-            await loadWorkspaces()
-        } catch {}
+    // Optional-return convenience for the first-message flow. Interactive
+    // editors call `addWorkspace` so host errors remain visible and retryable.
+    func createWorkspace(path: String) async -> String? {
+        try? await addWorkspace(path: path)
     }
 
-    func deleteWorkspace(workspaceId: String) async {
-        do {
-            let _ = try await client.call("workspace.delete", payload: .object(["workspaceId": .string(workspaceId)]))
-            if selectedWorkspaceId == workspaceId {
-                selectedWorkspaceId = nil
-                selectedConversationId = nil
-            }
-            await loadWorkspaces()
-        } catch {}
+    func addWorkspace(path: String) async throws -> String? {
+        let value = try await client.call("workspace.create", payload: .object(["path": .string(path)]))
+        let wid = value["workspace"]?["workspaceId"]?.string
+        await loadWorkspaces()
+        if let wid {
+            selectedWorkspaceId = wid
+            selectedConversationId = nil
+        }
+        return wid
+    }
+
+    func renameWorkspace(workspaceId: String, title: String) async throws {
+        let _ = try await client.call("workspace.rename", payload: .object(["workspaceId": .string(workspaceId), "title": .string(title)]))
+        await loadWorkspaces()
+    }
+
+    func deleteWorkspace(workspaceId: String) async throws {
+        let _ = try await client.call("workspace.delete", payload: .object(["workspaceId": .string(workspaceId)]))
+        if selectedWorkspaceId == workspaceId {
+            selectedWorkspaceId = nil
+            selectedConversationId = nil
+            mainPresentation = .workspace
+        }
+        await loadWorkspaces()
+        await loadSessions()
     }
 
     var visibleSessions: [SessionSummary] {
-        var result = sessions
+        var result = sessions.filter { !$0.blank && !archivedSessionIds.contains($0.sessionId) }
         if let wid = selectedWorkspaceId, let ws = workspaces.first(where: { $0.workspaceId == wid }) {
             result = result.filter { ws.sessionIds.contains($0.sessionId) }
         }
@@ -284,7 +388,10 @@ final class AppModel: ObservableObject {
                 "expectedRevision": .number(permissionRevision),
             ]))
             await loadPermission()
-        } catch {}
+            operationError = nil
+        } catch {
+            operationError = String(describing: error)
+        }
     }
 
     func discoverHosts() async {
@@ -344,7 +451,16 @@ final class AppModel: ObservableObject {
         case "session/event":
             if let sessionId = frame.payload["sessionId"]?.string,
                let model = openSessions[sessionId] {
-                model.apply(event: frame.payload["event"] ?? .null, view: frame.payload["view"])
+                let event = frame.payload["event"] ?? .null
+                model.apply(event: event, view: frame.payload["view"])
+                if event["type"]?.string == "commands/change" {
+                    Task { await model.loadCommands() }
+                }
+            }
+        case "commands/change":
+            if let sessionId = frame.payload["sessionId"]?.string ?? frame.payload["agentId"]?.string,
+               let model = openSessions[sessionId] {
+                Task { await model.loadCommands() }
             }
         case "approval/requested":
             if let wait = ApprovalWait(rpcId: frame.rpcId, payload: frame.payload) {
@@ -386,9 +502,102 @@ final class AppModel: ObservableObject {
             }
         case "host/session-added", "host/session-removed", "host/workspace-changed",
              "host/workspace-removed", "host/workspace-order-changed", "host/archived-sessions-changed":
-            Task { await loadSessions() }
+            Task {
+                await loadSessions()
+                await loadWorkspaces()
+            }
         default:
             break
+        }
+    }
+}
+
+private extension AppModel {
+    func seedStoreScreenshotDemo() {
+        let active = SessionSummary(json: .object([
+            "sessionId": .string("release-check"),
+            "updatedAt": .number(1_775_123_600),
+            "running": .bool(true),
+            "blank": .bool(false),
+            "cwd": .string("~/Projects/mobile-release"),
+            "agentPreset": .string("code"),
+            "projections": .object(["values": .object(["title": .string("Prepare the iOS release")])]),
+        ]))!
+        let review = SessionSummary(json: .object([
+            "sessionId": .string("review-queue"),
+            "updatedAt": .number(1_775_122_900),
+            "running": .bool(false),
+            "blank": .bool(false),
+            "cwd": .string("~/Projects/api-service"),
+            "agentPreset": .string("standard"),
+            "projections": .object(["values": .object(["title": .string("Review the deployment queue")])]),
+        ]))!
+        let tests = SessionSummary(json: .object([
+            "sessionId": .string("test-report"),
+            "updatedAt": .number(1_775_120_100),
+            "running": .bool(false),
+            "blank": .bool(false),
+            "cwd": .string("~/Projects/product-site"),
+            "agentPreset": .string("minimal"),
+            "projections": .object(["values": .object(["title": .string("Summarize today’s test report")])]),
+        ]))!
+
+        sessions = [active, review, tests]
+        workspaces = [
+            Workspace(json: .object([
+                "workspaceId": .string("mobile-release"),
+                "path": .string("~/Projects/mobile-release"),
+                "title": .string("Mobile release"),
+                "sessionIds": .array([.string(active.sessionId)]),
+                "updatedAt": .string("Today"),
+            ]))!,
+            Workspace(json: .object([
+                "workspaceId": .string("api-service"),
+                "path": .string("~/Projects/api-service"),
+                "title": .string("API service"),
+                "sessionIds": .array([.string(review.sessionId)]),
+                "updatedAt": .string("Today"),
+            ]))!,
+            Workspace(json: .object([
+                "workspaceId": .string("product-site"),
+                "path": .string("~/Projects/product-site"),
+                "title": .string("Product site"),
+                "sessionIds": .array([.string(tests.sessionId)]),
+                "updatedAt": .string("Yesterday"),
+            ]))!,
+        ]
+        agentPresets = [
+            AgentPreset(json: .object(["id": .string("standard"), "trust": .string("system"), "isDefault": .bool(true)]))!,
+            AgentPreset(json: .object(["id": .string("code"), "trust": .string("system"), "isDefault": .bool(false)]))!,
+        ]
+        credentials = [
+            CredentialView(name: "DEEPSEEK_API_KEY", configured: true, writable: false),
+            CredentialView(name: "PI_API_KEY", configured: true, writable: false),
+        ]
+        providers = [ProviderView(json: .object([
+            "provider": .string("deepseek"),
+            "displayName": .string("DeepSeek"),
+            "settingsNs": .string("deepseek"),
+            "active": .bool(true),
+        ]))!]
+        discoveredHosts = [
+            DiscoveredHost(baseURL: URL(string: "https://studio-mac.tailnet")!, label: "Studio Mac", info: nil),
+            DiscoveredHost(baseURL: URL(string: "https://build-server.example")!, label: "Build server", info: nil),
+        ]
+        permissionPreset = "read-only"
+        selectedWorkspaceId = workspaces.first?.workspaceId
+        connectionInfo = "Connected securely via Tailscale"
+        isOffline = false
+
+        switch storeScreenshotDemoScreen {
+        case "sidebar":
+            mainPresentation = .workspace
+            showSidebar = true
+        case "settings":
+            mainPresentation = .workspace
+            showSettings = true
+        default:
+            mainPresentation = .welcome
         }
     }
 }

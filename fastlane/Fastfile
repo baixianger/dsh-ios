@@ -45,3 +45,19 @@ lane :provision_device do
     )
   end
 end
+
+# Uploads only the localized marketing screenshots. It never uploads a build,
+# edits listing metadata, or submits a version for review.
+lane :upload_store_screenshots do
+  upload_to_app_store(
+    api_key: asc_api_key,
+    app_identifier: "com.baixianger.dshios",
+    screenshots_path: File.expand_path("store_screenshots", __dir__),
+    overwrite_screenshots: true,
+    skip_binary_upload: true,
+    skip_metadata: true,
+    skip_app_version_update: true,
+    submit_for_review: false,
+    force: true
+  )
+end

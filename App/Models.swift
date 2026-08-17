@@ -39,6 +39,32 @@ struct SessionSummary: Identifiable {
     }
 }
 
+struct SessionCommand: Identifiable, Equatable {
+    let name: String
+    let description: String
+    let inputHint: String?
+    var insertion: String { "/" + name + ((inputHint?.isEmpty == false) ? " " : "") }
+
+    var id: String { name }
+
+    init?(json: JSONValue) {
+        guard let name = json["name"]?.string, !name.isEmpty else { return nil }
+        self.name = name.hasPrefix("/") ? String(name.dropFirst()) : name
+        self.description = json["description"]?.string ?? ""
+        self.inputHint = json["inputHint"]?.string ?? json["input"]?["hint"]?.string
+    }
+}
+
+struct WorkspaceListProjection {
+    let workspaces: [Workspace]
+    let archivedSessionIds: Set<String>
+
+    init(json: JSONValue) {
+        workspaces = (json["items"]?.array ?? []).compactMap { Workspace(json: $0) }
+        archivedSessionIds = Set((json["archivedSessionIds"]?.array ?? []).compactMap { $0.string })
+    }
+}
+
 struct ChatItem: Identifiable, Equatable {
     enum Role { case user, assistant, tool, notice }
     let id: String
@@ -54,6 +80,331 @@ struct ChatItem: Identifiable, Equatable {
     var imageAttachmentId: String? = nil
     var imageData: Data? = nil
     var messageId: String? = nil
+}
+
+enum TrajectoryKind: String, CaseIterable {
+    case user
+    case assistant
+    case tool
+    case subtool
+    case context
+    case compaction
+    case system
+    case error
+}
+
+struct TrajectoryRecord: Identifiable, Equatable {
+    let seq: Int
+    let time: Double
+    let eventType: String
+    let turn: Int?
+    let step: Int?
+    let kind: TrajectoryKind
+    let title: String
+    let preview: String
+    let durationMilliseconds: Double?
+    let isError: Bool
+    let data: JSONValue
+    let view: JSONValue?
+
+    var id: String { "\(eventType)-\(seq)" }
+
+    var searchableText: String {
+        [eventType, title, preview, data.prettyPrinted]
+            .joined(separator: " ")
+            .localizedLowercase
+    }
+}
+
+struct TrajectoryTurn: Identifiable, Equatable {
+    let turn: Int?
+    let records: [TrajectoryRecord]
+
+    var id: String { turn.map { "turn-\($0)" } ?? "session" }
+}
+
+enum TrajectoryBuilder {
+    static func build(_ entries: [JSONValue]) -> [TrajectoryRecord] {
+        let events = entries.compactMap { entry -> (event: JSONValue, view: JSONValue?)? in
+            guard let type = entry["event"]?["type"]?.string, !type.isEmpty else { return nil }
+            return (entry["event"] ?? .null, entry["view"])
+        }
+
+        var toolResults: [String: JSONValue] = [:]
+        var toolResultViews: [String: JSONValue] = [:]
+        var stepStarts: [String: Double] = [:]
+        var currentTurn: Int?
+
+        for pair in events {
+            let event = pair.event
+            let type = event["type"]?.string ?? ""
+            let data = event["data"] ?? .null
+            if type == "tool/result", let callId = resultCallId(data) {
+                toolResults[callId] = event
+                if let view = pair.view { toolResultViews[callId] = view }
+            } else if type == "step/start" {
+                if let turn = integer(data["turn"]), let step = integer(data["step"]) {
+                    stepStarts["\(turn):\(step)"] = event["time"]?.double
+                }
+            }
+        }
+
+        var records: [TrajectoryRecord] = []
+        var previousTime: Double?
+        for pair in events {
+            let event = pair.event
+            let type = event["type"]?.string ?? ""
+            let data = event["data"] ?? .null
+            let time = event["time"]?.double ?? previousTime ?? 0
+            if type == "turn/start" { currentTurn = integer(data["turn"]) }
+            let turn = integer(data["turn"]) ?? currentTurn
+            let step = integer(data["step"])
+
+            let record: TrajectoryRecord?
+            switch type {
+            case "user/message":
+                record = make(event, view: pair.view, kind: .user, title: "User message", preview: messageText(data), turn: turn, step: step)
+            case "assistant/message":
+                let content = data["message"]?["content"] ?? .null
+                let output = textBlocks(content)
+                let reasoning = reasoningBlocks(content)
+                let start = turn.flatMap { t in step.map { stepStarts["\(t):\($0)"] } } ?? previousTime
+                record = make(
+                    event,
+                    view: pair.view,
+                    kind: .assistant,
+                    title: "Assistant",
+                    preview: output.isEmpty ? reasoning : output,
+                    turn: turn,
+                    step: step,
+                    duration: duration(from: start, to: time)
+                )
+            case "tool/call":
+                let callId = data["callId"]?.string ?? data["id"]?.string
+                let name = data["name"]?.string ?? "Tool call"
+                let args = data["arguments"]?.string ?? data["arguments"]?.prettyPrinted ?? ""
+                let result = callId.flatMap { toolResults[$0] }
+                let resultTime = result?["time"]?.double
+                let isError = result?["data"]?["error"] != nil
+                record = make(
+                    event,
+                    view: callId.flatMap { toolResultViews[$0] } ?? pair.view,
+                    kind: .tool,
+                    title: name,
+                    preview: args,
+                    turn: turn,
+                    step: step,
+                    duration: duration(from: time, to: resultTime),
+                    isError: isError
+                )
+            case "tool/result":
+                record = resultCallId(data) == nil
+                    ? make(event, view: pair.view, kind: .tool, title: "Tool result", preview: toolResultText(data), turn: turn, step: step)
+                    : nil
+            case "tool/code-dispatch-start", "tool/code-dispatch":
+                record = make(
+                    event,
+                    view: pair.view,
+                    kind: .subtool,
+                    title: data["name"]?.string ?? "Code dispatch",
+                    preview: data["arguments"]?.prettyPrinted ?? "",
+                    turn: turn,
+                    step: step
+                )
+            case "request/header":
+                record = make(event, view: pair.view, kind: .context, title: "Request context", preview: requestPreview(data), turn: turn, step: step)
+            case "compaction/start", "compaction/end":
+                record = make(event, view: pair.view, kind: .compaction, title: "Compaction", preview: data["summary"]?.string ?? "", turn: turn, step: step)
+            case "session/end":
+                record = make(event, view: pair.view, kind: .system, title: "Session ended", preview: "", turn: turn, step: step)
+            case "turn/end":
+                if data["error"] != nil {
+                    record = make(event, view: pair.view, kind: .error, title: "Turn error", preview: data["error"]?.prettyPrinted ?? "", turn: turn, step: step, isError: true)
+                } else {
+                    record = nil
+                }
+                currentTurn = nil
+            default:
+                record = nil
+            }
+            if let record { records.append(record) }
+            previousTime = time
+        }
+        return records.sorted { $0.seq < $1.seq }
+    }
+
+    static func group(_ records: [TrajectoryRecord]) -> [TrajectoryTurn] {
+        var order: [Int?] = []
+        var grouped: [Int?: [TrajectoryRecord]] = [:]
+        for record in records {
+            if grouped[record.turn] == nil { order.append(record.turn) }
+            grouped[record.turn, default: []].append(record)
+        }
+        return order.map { TrajectoryTurn(turn: $0, records: grouped[$0] ?? []) }
+    }
+
+    private static func make(
+        _ event: JSONValue,
+        view: JSONValue?,
+        kind: TrajectoryKind,
+        title: String,
+        preview: String,
+        turn: Int?,
+        step: Int?,
+        duration: Double? = nil,
+        isError: Bool = false
+    ) -> TrajectoryRecord {
+        let compact = preview.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return TrajectoryRecord(
+            seq: integer(event["seq"]) ?? 0,
+            time: event["time"]?.double ?? 0,
+            eventType: event["type"]?.string ?? "event",
+            turn: turn,
+            step: step,
+            kind: kind,
+            title: title,
+            preview: String(compact.prefix(512)),
+            durationMilliseconds: duration,
+            isError: isError,
+            data: event["data"] ?? .null,
+            view: view
+        )
+    }
+
+    private static func integer(_ value: JSONValue?) -> Int? {
+        value?.double.map(Int.init)
+    }
+
+    private static func duration(from start: Double?, to end: Double?) -> Double? {
+        guard let start, let end, start.isFinite, end.isFinite else { return nil }
+        return max(0, end - start)
+    }
+
+    private static func resultCallId(_ data: JSONValue) -> String? {
+        data["message"]?["source"]?["callId"]?.string ?? data["callId"]?.string
+    }
+
+    private static func messageText(_ data: JSONValue) -> String {
+        textBlocks(data["content"] ?? .null)
+    }
+
+    // Trajectory parsing is intentionally self-contained. SessionModel is
+    // main-actor isolated because it drives the UI, while these transforms are
+    // pure and can safely run outside that actor.
+    private static func textBlocks(_ content: JSONValue) -> String {
+        guard let blocks = content.array else { return "" }
+        return blocks.compactMap { block in
+            block["type"]?.string == "text" ? block["text"]?.string : nil
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n")
+    }
+
+    private static func reasoningBlocks(_ content: JSONValue) -> String {
+        guard let blocks = content.array else { return "" }
+        return blocks.compactMap { block in
+            block["type"]?.string == "reasoning" ? block["text"]?.string : nil
+        }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n")
+    }
+
+    private static func toolResultText(_ data: JSONValue) -> String {
+        let text = textBlocks(data["message"]?["content"] ?? .null)
+        let error = data["error"]?["message"]?.string ?? data["error"]?["name"]?.string
+        return error.map { text.isEmpty ? $0 : text + "\n" + $0 } ?? text
+    }
+
+    private static func requestPreview(_ data: JSONValue) -> String {
+        data["prompt"]?["messages"]?.array?.last?["content"]?.prettyPrinted
+            ?? data["prompt"]?.prettyPrinted
+            ?? ""
+    }
+}
+
+enum TranscriptEntry: Identifiable {
+    case message(ChatItem)
+    case activity(id: String, reasoning: String?, tools: [ChatItem])
+
+    var id: String {
+        switch self {
+        case .message(let item):
+            item.id
+        case .activity(let id, _, _):
+            id
+        }
+    }
+
+    var message: ChatItem? {
+        guard case .message(let item) = self else { return nil }
+        return item
+    }
+}
+
+enum TranscriptBuilder {
+    static func build(from items: [ChatItem]) -> [TranscriptEntry] {
+        var entries: [TranscriptEntry] = []
+        var index = items.startIndex
+
+        while index < items.endIndex {
+            let item = items[index]
+
+            if item.role == .assistant,
+               let reasoning = item.reasoning,
+               !reasoning.isEmpty {
+                let toolsStart = items.index(after: index)
+                let toolsEnd = endOfToolRun(in: items, startingAt: toolsStart)
+
+                if toolsStart < toolsEnd {
+                    let tools = Array(items[toolsStart..<toolsEnd])
+                    entries.append(
+                        .activity(
+                            id: "activity-\(item.id)",
+                            reasoning: reasoning,
+                            tools: tools
+                        )
+                    )
+
+                    var response = item
+                    response.reasoning = nil
+                    if !response.text.isEmpty || response.isStreaming || response.imageAttachmentId != nil {
+                        entries.append(.message(response))
+                    }
+
+                    index = toolsEnd
+                    continue
+                }
+            }
+
+            if item.role == .tool {
+                let toolsEnd = endOfToolRun(in: items, startingAt: index)
+                let tools = Array(items[index..<toolsEnd])
+                entries.append(
+                    .activity(
+                        id: "tools-\(item.id)",
+                        reasoning: nil,
+                        tools: tools
+                    )
+                )
+                index = toolsEnd
+                continue
+            }
+
+            entries.append(.message(item))
+            index = items.index(after: index)
+        }
+
+        return entries
+    }
+
+    private static func endOfToolRun(in items: [ChatItem], startingAt start: Int) -> Int {
+        var end = start
+        while end < items.endIndex, items[end].role == .tool {
+            end = items.index(after: end)
+        }
+        return end
+    }
 }
 
 struct PluginEntry: Identifiable {
@@ -136,10 +487,22 @@ struct JobView: Identifiable {
     }
 }
 
+struct ModelEffort: Identifiable {
+    let id: String
+    let name: String
+    let description: String?
+}
+
+struct ModelReasoning {
+    let efforts: [ModelEffort]
+    let defaultEffort: String?
+}
+
 struct ModelInfo: Identifiable {
     let id: String
     let name: String
-    let efforts: [String]
+    let description: String?
+    let reasoning: ModelReasoning?
 }
 
 struct ModelGroup: Identifiable {
@@ -153,8 +516,27 @@ struct ModelGroup: Identifiable {
         self.name = json["name"]?.string ?? id
         self.models = (json["models"]?.array ?? []).compactMap { m in
             guard let mid = m["id"]?.string else { return nil }
-            let efforts = m["reasoning"]?["efforts"]?.array?.compactMap { $0["id"]?.string } ?? []
-            return ModelInfo(id: mid, name: m["name"]?.string ?? mid, efforts: efforts)
+            let reasoning = m["reasoning"].flatMap { value -> ModelReasoning? in
+                guard value.object != nil else { return nil }
+                let efforts = (value["efforts"]?.array ?? []).compactMap { effort -> ModelEffort? in
+                    guard let effortId = effort["id"]?.string else { return nil }
+                    return ModelEffort(
+                        id: effortId,
+                        name: effort["name"]?.string ?? effortId,
+                        description: effort["description"]?.string
+                    )
+                }
+                return ModelReasoning(
+                    efforts: efforts,
+                    defaultEffort: value["defaultEffort"]?.string
+                )
+            }
+            return ModelInfo(
+                id: mid,
+                name: m["name"]?.string ?? mid,
+                description: m["description"]?.string,
+                reasoning: reasoning
+            )
         }
     }
 }
@@ -188,7 +570,18 @@ struct AgentPreset: Identifiable {
     let isDefault: Bool
     let name: String?
     let description: String?
-    var displayName: String { name ?? id }
+    var displayName: String {
+        // DSH Web localizes shipped presets from their stable ids instead of
+        // trusting host metadata. Keep custom preset names untouched.
+        guard trust == "system" else { return name ?? id }
+        return switch id {
+        case "standard": String(localized: "标准模式")
+        case "code": String(localized: "PTC 编程模式")
+        case "minimal": String(localized: "极简模式")
+        case "cordis": String(localized: "创造模式")
+        default: name ?? id
+        }
+    }
 
     init?(json: JSONValue) {
         guard let id = json["id"]?.string else { return nil }
