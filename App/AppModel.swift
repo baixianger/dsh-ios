@@ -121,7 +121,7 @@ final class AppModel: ObservableObject {
                   let saved = try? JSONDecoder().decode([DshServer].self, from: data) {
             loadedServers = saved
         } else if let legacyURL = defaults.string(forKey: "dshBaseURL"), !legacyURL.isEmpty {
-            loadedServers = [DshServer(name: URL(string: legacyURL)?.host ?? "DSH Server", baseURLString: legacyURL)]
+            loadedServers = [DshServer(name: URL(string: legacyURL)?.host ?? "DSH Host", baseURLString: legacyURL)]
         } else {
             loadedServers = []
         }
@@ -178,7 +178,7 @@ final class AppModel: ObservableObject {
         let trimmedURL = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedURL.isEmpty else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let displayName = trimmedName.isEmpty ? (URL(string: trimmedURL)?.host ?? "DSH Server") : trimmedName
+        let displayName = trimmedName.isEmpty ? (URL(string: trimmedURL)?.host ?? "DSH Host") : trimmedName
 
         if let index = servers.firstIndex(where: {
             $0.baseURLString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ==

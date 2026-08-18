@@ -29,7 +29,7 @@ enum DshNetworkAuthError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidPairingURL: "无效的 DSH 配对二维码"
-        case .rejected(let status): "配对被 Server 拒绝（HTTP \(status)）"
+        case .rejected(let status): "配对被 DSH 主机拒绝（HTTP \(status)）"
         case .missingCredential: "设备凭据不存在，请重新扫码配对"
         }
     }

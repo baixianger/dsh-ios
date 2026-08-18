@@ -19,3 +19,22 @@ final class DshServerAliasTests: XCTestCase {
         XCTAssertEqual(server.displayName, "Mac mini")
     }
 }
+
+final class ServerOnboardingFlowTests: XCTestCase {
+    func testFlowAdvancesAcrossAllConnectionSteps() {
+        var flow = ServerOnboardingFlowState()
+        XCTAssertEqual(flow.step, .server)
+        XCTAssertFalse(flow.isLastStep)
+
+        flow.advance()
+        XCTAssertEqual(flow.step, .network)
+        XCTAssertFalse(flow.isLastStep)
+
+        flow.advance()
+        XCTAssertEqual(flow.step, .pair)
+        XCTAssertTrue(flow.isLastStep)
+
+        flow.advance()
+        XCTAssertEqual(flow.step, .pair)
+    }
+}

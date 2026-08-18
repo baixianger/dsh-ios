@@ -37,9 +37,9 @@
 		<true/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>用于扫描 DSH Server 的一次性配对二维码</string>
+	<string>用于扫描 DSH 主机的一次性配对二维码</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>用于连接用户选择的局域网 DSH Server</string>
+	<string>用于连接用户选择的局域网 DSH 主机</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>用于语音输入</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

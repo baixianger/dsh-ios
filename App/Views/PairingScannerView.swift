@@ -25,9 +25,9 @@ struct DshNetworkPairingSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 7) {
-                    Text("在 DSH Server 的 Shell 运行：")
+                    Text("在运行 DSH 的主机终端中执行：")
                         .font(.subheadline)
-                    Text("npx dsh-network pair --url https://your-server")
+                    Text("npx dsh-network pair --url https://your-host")
                         .font(.caption.monospaced())
                         .textSelection(.enabled)
                     Text("二维码有效 5 分钟且只能使用一次。浏览器和 DSH iOS 使用同一种二维码。")
@@ -36,7 +36,7 @@ struct DshNetworkPairingSheet: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                TextField("https://server/dsh-network/connect#v=1&t=…", text: $pairingURL)
+                TextField("https://host/dsh-network/connect#v=1&t=…", text: $pairingURL)
                     .textFieldStyle(.roundedBorder)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
@@ -55,7 +55,7 @@ struct DshNetworkPairingSheet: View {
                 }
             }
             .padding(20)
-            .navigationTitle("扫描 Server 二维码")
+            .navigationTitle("扫描 DSH 主机二维码")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

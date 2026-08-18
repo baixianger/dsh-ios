@@ -29,22 +29,20 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @AppStorage("dsh.appearance") private var appearance = "system"
-    @State private var selection: SettingsDestination? = .general
     @State private var baseURL = ""
     @State private var editingCredential: CredentialView?
     @State private var editingServer: DshServer?
     @State private var isAddingServer = false
     @State private var isPairingServer = false
     @State private var pluginSearch = ""
+    @State private var path: [SettingsDestination]
+
+    init(openingConnection: Bool = false) {
+        _path = State(initialValue: openingConnection ? [.connection] : [])
+    }
 
     var body: some View {
-        Group {
-            if usesPhoneNavigation {
-                compactSettings
-            } else {
-                regularSettings
-            }
-        }
+        compactSettings
         .onAppear {
             baseURL = model.baseURLString
         }
@@ -70,12 +68,8 @@ struct SettingsView: View {
         }
     }
 
-    private var usesPhoneNavigation: Bool {
-        UIDevice.current.userInterfaceIdiom == .phone
-    }
-
     private var compactSettings: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List(SettingsDestination.allCases) { destination in
                 NavigationLink(value: destination) {
                     Label(destination.title, systemImage: destination.systemImage)
@@ -86,28 +80,6 @@ struct SettingsView: View {
             .navigationDestination(for: SettingsDestination.self) { destination in
                 detail(for: destination)
             }
-            .toolbar { closeToolbar }
-        }
-    }
-
-    private var regularSettings: some View {
-        NavigationStack {
-            HStack(spacing: 0) {
-                List(selection: $selection) {
-                    ForEach(SettingsDestination.allCases) { destination in
-                        Label(destination.title, systemImage: destination.systemImage)
-                            .tag(destination)
-                    }
-                }
-                .frame(width: 250)
-
-                Divider()
-
-                detail(for: selection ?? .general)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .navigationTitle("设置")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar { closeToolbar }
         }
     }
@@ -132,25 +104,25 @@ struct SettingsView: View {
     }
 
     private var connectionPage: some View {
-        settingsPage(title: "连接与配对", intro: "扫描 Server 生成的一次性二维码、粘贴配对链接，或手动添加已有 Server 地址。") {
+        settingsPage(title: "连接与配对", intro: "扫描 DSH 主机生成的一次性二维码、粘贴配对链接，或手动输入主机地址。") {
             settingsCard {
                 HStack {
-                    Text("DSH Servers").font(.headline)
+                    Text("DSH Hosts").font(.headline)
                     Spacer()
                     Button("扫码配对", systemImage: "qrcode.viewfinder") {
                         isPairingServer = true
                     }
                     .labelStyle(.iconOnly)
-                    .accessibilityLabel("扫描 DSH Server 配对二维码")
+                    .accessibilityLabel("扫描 DSH 主机配对二维码")
                     Button("添加", systemImage: "plus") {
                         isAddingServer = true
                     }
                     .labelStyle(.iconOnly)
-                    .accessibilityLabel("添加 DSH Server")
+                    .accessibilityLabel("添加 DSH 主机")
                 }
 
                 if model.servers.isEmpty {
-                    Text("尚未连接 DSH Server")
+                    Text("尚未连接 DSH 主机")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
@@ -217,7 +189,7 @@ struct SettingsView: View {
                 Button("保存并重连") {
                     let value = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !value.isEmpty else { return }
-                    model.addServer(name: URL(string: value)?.host ?? "DSH Server", baseURLString: value)
+                    model.addServer(name: URL(string: value)?.host ?? "DSH Host", baseURLString: value)
                 }
                 .buttonStyle(.borderedProminent)
 
@@ -599,15 +571,15 @@ private struct ServerEditorSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("DSH Server") {
-                    TextField(server == nil ? "名称" : "别名（仅此 iPhone）", text: $name)
+                Section("DSH Host") {
+                    TextField(server == nil ? "名称" : "别名（仅此设备）", text: $name)
                     TextField("https://host.example", text: $baseURLString)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
                 }
             }
-            .navigationTitle(server == nil ? "添加 Server" : "编辑 Server")
+            .navigationTitle(server == nil ? "添加 DSH 主机" : "编辑 DSH 主机")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

@@ -94,32 +94,38 @@ struct SessionListView: View {
             )
             .ignoresSafeArea([.container, .keyboard], edges: .vertical)
 
-            NavigationStack {
-                Group {
-                    if model.mainPresentation == .blank {
-                        Color(uiColor: .systemBackground)
-                    } else if model.mainPresentation == .welcome {
-                        WelcomeView()
-                    } else if let cid = model.selectedConversationId {
-                        SessionDetailView(model: model.sessionModel(for: cid))
-                    } else if model.selectedWorkspaceId != nil {
-                        BlankChatView()
-                    } else {
-                        Color(uiColor: .systemBackground)
-                    }
-                }
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button {
-                            withAnimation(spring) {
-                                drawerDragOffset = 0
-                                model.showSidebar.toggle()
+            Group {
+                if model.servers.isEmpty {
+                    ServerOnboardingView()
+                } else {
+                    NavigationStack {
+                        Group {
+                            if model.mainPresentation == .blank {
+                                Color(uiColor: .systemBackground)
+                            } else if model.mainPresentation == .welcome {
+                                WelcomeView()
+                            } else if let cid = model.selectedConversationId {
+                                SessionDetailView(model: model.sessionModel(for: cid))
+                            } else if model.selectedWorkspaceId != nil {
+                                BlankChatView()
+                            } else {
+                                Color(uiColor: .systemBackground)
                             }
-                        } label: {
-                            Image(systemName: "folder")
                         }
-                        .accessibilityLabel("切换侧边栏")
-                        .accessibilityIdentifier("sidebar.toggle")
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button {
+                                    withAnimation(spring) {
+                                        drawerDragOffset = 0
+                                        model.showSidebar.toggle()
+                                    }
+                                } label: {
+                                    Image(systemName: "folder")
+                                }
+                                .accessibilityLabel("切换侧边栏")
+                                .accessibilityIdentifier("sidebar.toggle")
+                            }
+                        }
                     }
                 }
             }

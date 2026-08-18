@@ -712,14 +712,14 @@ struct OfflineReminderView: View {
                 .foregroundStyle(.secondary)
             Text("无法连接到 DeepSeek Harness")
                 .font(.headline)
-            Text("请确认 DSH Server 正在运行，并且本 iPhone 可以访问它的地址。")
+            Text("请确认 DSH 主机在线，并且当前设备可以访问它的地址。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             VStack(alignment: .leading, spacing: 12) {
-                step(1, "确认运行 DSH 的主机（Mac / 服务器）在线")
-                step(2, "在 Server 上生成二维码，或粘贴一次性配对链接")
+                step(1, "确认 DSH 主机（Mac、Linux 或 VPS）在线")
+                step(2, "在 DSH 主机上生成二维码，或粘贴一次性配对链接")
                 step(3, "Tailnet 或其他网络也可在「设置」中手动添加可访问的 Base URL")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
