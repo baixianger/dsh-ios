@@ -118,7 +118,7 @@ final class AppModel: ObservableObject {
         let defaults = UserDefaults.standard
         let loadedServers: [DshServer]
         if storeScreenshotDemoScreen != nil {
-            loadedServers = [DshServer(name: "Studio Mac", baseURLString: "https://harness-demo.tailnet", hostID: "store-demo")]
+            loadedServers = [DshServer(name: "Studio Mac", baseURLString: "https://studio-mac.example", hostID: "store-demo")]
         } else if let data = defaults.data(forKey: Self.serversKey),
                   let saved = try? JSONDecoder().decode([DshServer].self, from: data) {
             loadedServers = saved
@@ -821,12 +821,12 @@ private extension AppModel {
             "active": .bool(true),
         ]))!]
         discoveredHosts = [
-            DiscoveredHost(baseURL: URL(string: "https://studio-mac.tailnet")!, label: "Studio Mac", info: nil),
+            DiscoveredHost(baseURL: URL(string: "http://studio-mac.local:3080")!, label: "Studio Mac", info: nil),
             DiscoveredHost(baseURL: URL(string: "https://build-server.example")!, label: "Build server", info: nil),
         ]
         permissionPreset = "read-only"
         selectedWorkspaceId = workspaces.first?.workspaceId
-        connectionInfo = "Connected securely via Tailscale"
+        connectionInfo = "Connected securely"
         isOffline = false
 
         switch storeScreenshotDemoScreen {

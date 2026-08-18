@@ -699,7 +699,7 @@ struct SubagentHistoryView: View {
     }
 }
 
-// MARK: - Offline / Tailscale reminder
+// MARK: - Offline connection reminder
 
 struct OfflineReminderView: View {
     @EnvironmentObject private var model: AppModel
@@ -712,15 +712,15 @@ struct OfflineReminderView: View {
                 .foregroundStyle(.secondary)
             Text("无法连接到 DeepSeek Harness")
                 .font(.headline)
-            Text("本 iPhone 需要在 Tailscale 网络中才能访问运行 DSH 的主机。请确认两端都已安装并登录 Tailscale：")
+            Text("请确认 DSH Server 正在运行，并且本 iPhone 可以访问它的地址。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             VStack(alignment: .leading, spacing: 12) {
-                step(1, "在运行 DSH 的主机（Mac / 服务器）安装并登录 Tailscale")
-                step(2, "在本 iPhone 安装并登录 Tailscale（同一账号）")
-                step(3, "用 tailscale serve 暴露 DSH，再到「设置」把 Base URL 改成 tailnet HTTPS 地址")
+                step(1, "确认运行 DSH 的主机（Mac / 服务器）在线")
+                step(2, "同一家庭或局域网可使用自动发现")
+                step(3, "Tailnet 或其他网络请在「设置」中手动添加可访问的 Base URL")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

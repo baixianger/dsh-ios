@@ -18,29 +18,18 @@ struct DiscoveredHost: Identifiable {
 }
 
 struct HostDiscovery {
-    // Candidate endpoints: tailscale serve (https MagicDNS) and the local reverse proxy (http tailnet IP).
-    static let candidates: [(label: String, url: String)] = [
-        ("macbook-air", "http://macbook-air.tail849fa3.ts.net:8080"),
-        ("mac-mini", "http://mac-mini.tail849fa3.ts.net:8080"),
-        ("macbook-air (IP)", "http://100.91.91.43:8080"),
-        ("mac-mini (IP)", "http://100.123.131.117:8080"),
-        ("mac-mini", "https://mac-mini.tail849fa3.ts.net"),
-    ]
-
     static func discover() async -> [DiscoveredHost] {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 4
         config.timeoutIntervalForResource = 6
         let session = URLSession(configuration: config)
 
-        let configured = candidates.compactMap { candidate -> (String, URL)? in
-            guard let url = URL(string: candidate.url) else { return nil }
-            return (candidate.label, url)
-        }
+        // Bonjour is intentionally limited to the current LAN. Tailnet and other
+        // routed addresses are user-configured in Settings rather than guessed.
         let discovered = await BonjourDiscovery.discover()
 
         var results: [DiscoveredHost] = []
-        for (label, url) in configured + discovered {
+        for (label, url) in discovered {
             if let info = await probe(url: url, session: session) {
                 results.append(DiscoveredHost(baseURL: url, label: label, info: info))
             }

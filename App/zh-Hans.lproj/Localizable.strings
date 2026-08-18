@@ -133,3 +133,10 @@
 "命令加载失败：%@" = "命令加载失败：%@";
 "未知命令：%@" = "未知命令：%@";
 "反馈操作失败" = "反馈操作失败";
+"自动发现同一家庭或局域网中的 DSH Server；其他地址（包括 Tailnet）可手动添加。" = "自动发现同一家庭或局域网中的 DSH Server；其他地址（包括 Tailnet）可手动添加。";
+"未在当前局域网发现 DSH Server。Tailnet 或其他网络中的 Server 请使用“手动地址”添加。" = "未在当前局域网发现 DSH Server。Tailnet 或其他网络中的 Server 请使用“手动地址”添加。";
+"无法连接到 DeepSeek Harness" = "无法连接到 DeepSeek Harness";
+"请确认 DSH Server 正在运行，并且本 iPhone 可以访问它的地址。" = "请确认 DSH Server 正在运行，并且本 iPhone 可以访问它的地址。";
+"确认运行 DSH 的主机（Mac / 服务器）在线" = "确认运行 DSH 的主机（Mac / 服务器）在线";
+"同一家庭或局域网可使用自动发现" = "同一家庭或局域网可使用自动发现";
+"Tailnet 或其他网络请在「设置」中手动添加可访问的 Base URL" = "Tailnet 或其他网络请在「设置」中手动添加可访问的 Base URL";

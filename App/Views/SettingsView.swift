@@ -137,7 +137,7 @@ struct SettingsView: View {
     }
 
     private var connectionPage: some View {
-        settingsPage(title: "连接与配对", intro: "连接运行 DeepSeek Harness 的主机。自动发现与手动地址是 iOS 客户端特有能力。") {
+        settingsPage(title: "连接与配对", intro: "自动发现同一家庭或局域网中的 DSH Server；其他地址（包括 Tailnet）可手动添加。") {
             settingsCard {
                 HStack {
                     Text("DSH Servers").font(.headline)
@@ -233,7 +233,7 @@ struct SettingsView: View {
                         Text("正在发现 DSH 主机…").foregroundStyle(.secondary)
                     }
                 } else if model.discoveredHosts.isEmpty {
-                    Text("没有发现可配对的主机。请确认设备位于同一 Tailscale 网络。")
+                    Text("未在当前局域网发现 DSH Server。Tailnet 或其他网络中的 Server 请使用“手动地址”添加。")
                         .font(.subheadline).foregroundStyle(.secondary)
                     Button("重新扫描", systemImage: "arrow.clockwise") {
                         Task { await model.discoverHosts() }

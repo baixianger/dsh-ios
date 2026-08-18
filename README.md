@@ -18,7 +18,13 @@ iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议�
 
 输出：host.describe（typed）、session.list（raw JSON）、events.mux 前若干帧。
 
-## iPhone 通过 Tailscale 连
+## 发现与连接
+
+- 同一家庭或局域网：App 通过 Bonjour（`_dsh._tcp`）自动发现正在发布该服务的 DSH Server。
+- 手动地址：可添加任何 iPhone 能访问的 HTTP/HTTPS Base URL，包括局域网地址和 Tailnet 地址。
+- Tailnet 不参与自动发现，需要用户在「设置 → 连接与配对 → 手动地址」中添加。
+
+### 可选：iPhone 通过 Tailscale 连接
 
 1. 服务器（Mac）上把 3080 安全地暴露到 tailnet。DSH 官方禁止 --host 0.0.0.0，
    所以用 Tailscale 反向代理，而不是改 DSH 绑定：
@@ -32,7 +38,8 @@ iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议�
 
     dsh --profile web --trusted-host <你的 tailnet 域名或 host:port>
 
-3. 把 iOS App 的 baseURL 指向 https://<tailnet-域名>（wss 事件流自动走 443）。
+3. 在 iOS App 的「设置 → 连接与配对 → 手动地址」中添加
+   https://<tailnet-域名>（wss 事件流自动走 443）。
 
 ## 目录
 
@@ -65,8 +72,9 @@ iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议�
 说明：
 
 - App 默认连 http://127.0.0.1:3080（loopback 豁免 ATS）。
-- 远程访问时在「设置」里把 Base URL 改成 https://<tailnet 域名>（走 tailscale serve 的 HTTPS），
-  服务器需加 --trusted-host。
+- App 在家庭或局域网内通过 Bonjour 自动发现；局域网、Tailnet 或其他网络地址也都可以手动添加。
+- 通过 Tailnet 远程访问时，手动添加 https://<tailnet 域名>（走 tailscale serve 的 HTTPS），
+  服务器需加 --trusted-host；Tailnet 不做自动发现。
 - DshClient（Sources/DshClient）同时被 SwiftPM 包（CLI spike）和 App 内联编译使用。
 
 ## 功能清单
@@ -78,8 +86,7 @@ iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议�
 - 目标横幅（进行中/暂停/阻塞/完成 + 轮数）
 - 后台任务 + 子代理列表（session/jobs 帧 + subagent.list）
 - 审批卡片 + 提问表单（单选/多选）
-- 离线/断连提醒：提示在 DSH 主机与 iPhone 两端安装并登录 Tailscale，一键跳转设置
+- 离线/断连提醒：检查 Server 在线状态，并提示局域网自动发现或手动添加其他网络地址
 - 深色模式（语义色自适应）
 
 设计参考：DSH web 客户端的消息/思考/工具/统计呈现逻辑，以及 Pharos 项目的零依赖 Markdown 渲染器与 MarkdownUI 表格样式（交替行 + 描边）。
-
