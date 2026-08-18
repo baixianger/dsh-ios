@@ -1,16 +1,17 @@
 import Foundation
 
 struct DiscoveredHost: Identifiable {
-    let id: String
+    var id: String { hostID ?? baseURL.absoluteString }
     let baseURL: URL
     let label: String
+    let hostID: String?
     let model: String?
     let cwd: String?
 
     init(baseURL: URL, label: String, info: HostInfo?) {
-        self.id = baseURL.absoluteString
         self.baseURL = baseURL
         self.label = label
+        self.hostID = info?.hostId
         self.model = info?.model
         self.cwd = info?.cwd
     }
@@ -31,14 +32,20 @@ struct HostDiscovery {
         config.timeoutIntervalForResource = 6
         let session = URLSession(configuration: config)
 
+        let configured = candidates.compactMap { candidate -> (String, URL)? in
+            guard let url = URL(string: candidate.url) else { return nil }
+            return (candidate.label, url)
+        }
+        let discovered = await BonjourDiscovery.discover()
+
         var results: [DiscoveredHost] = []
-        for candidate in candidates {
-            guard let url = URL(string: candidate.url) else { continue }
+        for (label, url) in configured + discovered {
             if let info = await probe(url: url, session: session) {
-                results.append(DiscoveredHost(baseURL: url, label: candidate.label, info: info))
+                results.append(DiscoveredHost(baseURL: url, label: label, info: info))
             }
         }
-        return results
+        var seen = Set<String>()
+        return results.filter { seen.insert($0.id).inserted }
     }
 
     static func probe(url: URL, session: URLSession) async -> HostInfo? {
@@ -56,5 +63,49 @@ struct HostDiscovery {
         } catch {
             return nil
         }
+    }
+}
+
+private final class BonjourDiscovery: NSObject, NetServiceBrowserDelegate, NetServiceDelegate {
+    private let browser = NetServiceBrowser()
+    private var services: [NetService] = []
+    private var continuation: CheckedContinuation<[(String, URL)], Never>?
+    private var timeoutTask: Task<Void, Never>?
+
+    static func discover() async -> [(String, URL)] {
+        await withCheckedContinuation { continuation in
+            let discovery = BonjourDiscovery()
+            discovery.start(continuation: continuation)
+        }
+    }
+
+    private func start(continuation: CheckedContinuation<[(String, URL)], Never>) {
+        self.continuation = continuation
+        browser.delegate = self
+        browser.searchForServices(ofType: "_dsh._tcp.", inDomain: "local.")
+        timeoutTask = Task { [self] in
+            try? await Task.sleep(for: .seconds(3))
+            finish()
+        }
+    }
+
+    func netServiceBrowser(_ browser: NetServiceBrowser, didFind service: NetService, moreComing: Bool) {
+        services.append(service)
+        service.delegate = self
+        service.resolve(withTimeout: 2)
+    }
+
+    func netServiceDidResolveAddress(_ sender: NetService) {}
+
+    private func finish() {
+        timeoutTask?.cancel()
+        browser.stop()
+        let endpoints = services.compactMap { service -> (String, URL)? in
+            guard let host = service.hostName, service.port > 0,
+                  let url = URL(string: "http://\(host):\(service.port)") else { return nil }
+            return (service.name, url)
+        }
+        continuation?.resume(returning: endpoints)
+        continuation = nil
     }
 }

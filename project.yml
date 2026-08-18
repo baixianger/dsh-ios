@@ -30,6 +30,9 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSMicrophoneUsageDescription: 用于语音输入
         NSSpeechRecognitionUsageDescription: 用于将语音转换为文字
+        NSLocalNetworkUsageDescription: 用于发现并连接局域网中的 DSH Server
+        NSBonjourServices:
+          - _dsh._tcp
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
   DshAppTests:

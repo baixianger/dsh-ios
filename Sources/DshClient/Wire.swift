@@ -78,6 +78,7 @@ public enum DshError: Error, CustomStringConvertible {
 
 /// host.describe value (typed example — the real app types every domain).
 public struct HostInfo: Decodable, Sendable {
+    public let hostId: String?
     public let version: String
     public let cwd: String
     public let provider: String?

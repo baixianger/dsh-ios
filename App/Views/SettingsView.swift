@@ -33,6 +33,8 @@ struct SettingsView: View {
     @State private var selection: SettingsDestination? = .general
     @State private var baseURL = ""
     @State private var editingCredential: CredentialView?
+    @State private var editingServer: DshServer?
+    @State private var isAddingServer = false
     @State private var pluginSearch = ""
 
     var body: some View {
@@ -56,6 +58,12 @@ struct SettingsView: View {
         }
         .sheet(item: $editingCredential) { credential in
             CredentialEditorSheet(credential: credential)
+        }
+        .sheet(item: $editingServer) { server in
+            ServerEditorSheet(server: server)
+        }
+        .sheet(isPresented: $isAddingServer) {
+            ServerEditorSheet(server: nil)
         }
         .alert("设置操作失败", isPresented: Binding(
             get: { model.settingsError != nil },
@@ -131,6 +139,73 @@ struct SettingsView: View {
     private var connectionPage: some View {
         settingsPage(title: "连接与配对", intro: "连接运行 DeepSeek Harness 的主机。自动发现与手动地址是 iOS 客户端特有能力。") {
             settingsCard {
+                HStack {
+                    Text("DSH Servers").font(.headline)
+                    Spacer()
+                    Button("添加", systemImage: "plus") {
+                        isAddingServer = true
+                    }
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel("添加 DSH Server")
+                }
+
+                if model.servers.isEmpty {
+                    Text("尚未连接 DSH Server")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(model.servers) { server in
+                            HStack(spacing: 12) {
+                                Button {
+                                    model.activateServer(server.id)
+                                    baseURL = server.baseURLString
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "desktopcomputer")
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 24)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(server.name)
+                                                .font(.subheadline.weight(.medium))
+                                                .foregroundStyle(.primary)
+                                            Text(server.baseURLString)
+                                                .font(.caption.monospaced())
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer()
+                                        if model.activeServerID == server.id {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.green)
+                                        }
+                                    }
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+
+                                Menu {
+                                    Button("编辑", systemImage: "pencil") {
+                                        editingServer = server
+                                    }
+                                    Button("删除", systemImage: "trash", role: .destructive) {
+                                        model.removeServer(server)
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 32, height: 32)
+                                }
+                                .accessibilityLabel("管理 \(server.name)")
+                            }
+                            .padding(.vertical, 8)
+                            if server.id != model.servers.last?.id { Divider() }
+                        }
+                    }
+                }
+
+                Divider()
+
                 Picker("连接方式", selection: $isManualMode) {
                     Text("自动发现").tag(false)
                     Text("手动地址").tag(true)
@@ -149,7 +224,7 @@ struct SettingsView: View {
                     Button("保存并重连") {
                         let value = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !value.isEmpty else { return }
-                        model.baseURLString = value
+                        model.addServer(name: URL(string: value)?.host ?? "DSH Server", baseURLString: value)
                     }
                     .buttonStyle(.borderedProminent)
                 } else if model.isDiscovering {
@@ -168,9 +243,8 @@ struct SettingsView: View {
                     VStack(spacing: 0) {
                         ForEach(model.discoveredHosts) { host in
                             Button {
-                                model.baseURLString = host.baseURL.absoluteString
+                                model.connectDiscoveredHost(host)
                                 baseURL = host.baseURL.absoluteString
-                                Task { await model.testConnection() }
                             } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: "desktopcomputer").foregroundStyle(.secondary).frame(width: 24)
@@ -183,7 +257,7 @@ struct SettingsView: View {
                                         }
                                     }
                                     Spacer()
-                                    if model.baseURLString == host.baseURL.absoluteString {
+                                    if model.activeServer?.hostID == host.hostID || model.baseURLString == host.baseURL.absoluteString {
                                         Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                                     }
                                 }
@@ -551,5 +625,55 @@ struct CredentialEditorSheet: View {
         } message: {
             Text(model.settingsError ?? "未知错误")
         }
+    }
+}
+
+private struct ServerEditorSheet: View {
+    @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    let server: DshServer?
+
+    @State private var name: String
+    @State private var baseURLString: String
+
+    init(server: DshServer?) {
+        self.server = server
+        _name = State(initialValue: server?.name ?? "")
+        _baseURLString = State(initialValue: server?.baseURLString ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("DSH Server") {
+                    TextField("名称", text: $name)
+                    TextField("https://host.example", text: $baseURLString)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                }
+            }
+            .navigationTitle(server == nil ? "添加 Server" : "编辑 Server")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存", action: save)
+                        .disabled(baseURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func save() {
+        if let server {
+            model.updateServer(server, name: name, baseURLString: baseURLString)
+        } else {
+            model.addServer(name: name, baseURLString: baseURLString)
+        }
+        dismiss()
     }
 }

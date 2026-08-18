@@ -84,7 +84,7 @@ struct SidebarView: View {
                         }
                     } else {
                         HStack(spacing: 4) {
-                            sectionTitle("工作区")
+                            sectionTitle(sidebarSnapshots.first?.server.name ?? String(localized: "工作区"))
                             Spacer()
                             Button {
                                 withAnimation(.easeInOut(duration: 0.18)) {
@@ -129,11 +129,11 @@ struct SidebarView: View {
                             .accessibilityLabel("添加工作区")
                         }
 
-                        if model.isLoadingSessions && model.workspaces.isEmpty {
+                        if model.isLoadingSessions && sidebarSnapshots.isEmpty {
                             ProgressView("加载…")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.vertical, 16)
-                        } else if model.workspaces.isEmpty {
+                        } else if sidebarSnapshots.isEmpty {
                             if model.isOffline {
                                 OfflineReminderView()
                                     .padding(.vertical, 8)
@@ -141,13 +141,23 @@ struct SidebarView: View {
                                 emptyRow("暂无工作区")
                             }
                         } else {
-                            if grouping == .grouped {
-                                ForEach(model.workspaces) { workspace in
-                                    workspaceSection(workspace)
+                            ForEach(Array(sidebarSnapshots.enumerated()), id: \.element.id) { index, snapshot in
+                                if index > 0 {
+                                    sectionTitle(snapshot.server.name)
                                 }
-                            } else {
-                                ForEach(flatSessions) { session in
-                                    sessionRow(session, subtitle: projectTitle(for: session.sessionId))
+                                if grouping == .grouped {
+                                    ForEach(snapshot.workspaces) { workspace in
+                                        workspaceSection(workspace, snapshot: snapshot)
+                                    }
+                                } else {
+                                    ForEach(flatSessions(in: snapshot)) { session in
+                                        sessionRow(
+                                            session,
+                                            subtitle: projectTitle(for: session.sessionId, in: snapshot),
+                                            serverID: snapshot.server.id,
+                                            workspaceID: snapshot.workspaces.first(where: { $0.sessionIds.contains(session.sessionId) })?.workspaceId
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -241,11 +251,26 @@ struct SidebarView: View {
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
+    private var sidebarSnapshots: [ServerWorkspaceSnapshot] {
+        if !model.sidebarServers.isEmpty { return model.sidebarServers }
+        guard !model.isOffline, let server = model.activeServer else { return [] }
+        return [ServerWorkspaceSnapshot(
+            server: server,
+            workspaces: model.workspaces,
+            sessions: model.sessions,
+            archivedSessionIds: model.archivedSessionIds
+        )]
+    }
+
     private func projectTitle(for sessionId: String) -> String? {
         model.workspaces.first(where: { $0.sessionIds.contains(sessionId) })?.title
     }
 
-    private func sectionTitle(_ title: LocalizedStringKey) -> some View {
+    private func projectTitle(for sessionId: String, in snapshot: ServerWorkspaceSnapshot) -> String? {
+        snapshot.workspaces.first(where: { $0.sessionIds.contains(sessionId) })?.title
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
         Text(title)
             .font(.headline)
             .foregroundStyle(.primary)
@@ -261,19 +286,21 @@ struct SidebarView: View {
             .padding(.vertical, 12)
     }
 
-    private func workspaceSection(_ workspace: Workspace) -> some View {
+    private func workspaceSection(_ workspace: Workspace, snapshot: ServerWorkspaceSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            let sessions = model.conversations(in: workspace.workspaceId, order: ordering == .manual ? .manual : .lastUpdated)
-            let isExpanded = expandedWorkspaceIds.contains(workspace.workspaceId)
-            let isActive = isExpanded && model.selectedWorkspaceId == workspace.workspaceId
+            let sessions = conversations(in: workspace, snapshot: snapshot)
+            let expansionID = "\(snapshot.server.id.uuidString):\(workspace.workspaceId)"
+            let isExpanded = expandedWorkspaceIds.contains(expansionID)
+            let isCurrentServer = model.activeServerID == snapshot.server.id
+            let isActive = isCurrentServer && isExpanded && model.selectedWorkspaceId == workspace.workspaceId
 
             HStack(spacing: 6) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         if isExpanded {
-                            expandedWorkspaceIds.remove(workspace.workspaceId)
+                            expandedWorkspaceIds.remove(expansionID)
                         } else {
-                            expandedWorkspaceIds.insert(workspace.workspaceId)
+                            expandedWorkspaceIds.insert(expansionID)
                         }
                     }
                 } label: {
@@ -293,24 +320,26 @@ struct SidebarView: View {
                 }
                 .buttonStyle(.plain)
 
-                Menu {
-                    Button("新建会话", systemImage: "square.and.pencil") {
-                        model.newChat(workspaceId: workspace.workspaceId)
-                        onClose()
+                if isCurrentServer {
+                    Menu {
+                        Button("新建会话", systemImage: "square.and.pencil") {
+                            model.newChat(workspaceId: workspace.workspaceId)
+                            onClose()
+                        }
+                        Button("重命名", systemImage: "pencil") {
+                            renameTarget = workspace
+                        }
+                        Button("删除", systemImage: "trash", role: .destructive) {
+                            deleteTarget = workspace
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44)
                     }
-                    Button("重命名", systemImage: "pencil") {
-                        renameTarget = workspace
-                    }
-                    Button("删除", systemImage: "trash", role: .destructive) {
-                        deleteTarget = workspace
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(workspace.title) 工作区操作")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(workspace.title) 工作区操作")
             }
             .frame(height: 34)
             .padding(.top, 8)
@@ -321,16 +350,20 @@ struct SidebarView: View {
                 let visibleSessions = isExpanded ? sessions : Array(sessions.prefix(3))
 
                 ForEach(visibleSessions) { session in
-                    sessionRow(session)
+                    sessionRow(
+                        session,
+                        serverID: snapshot.server.id,
+                        workspaceID: workspace.workspaceId
+                    )
                 }
 
                 if sessions.count > 3 {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             if isExpanded {
-                                expandedWorkspaceIds.remove(workspace.workspaceId)
+                                expandedWorkspaceIds.remove(expansionID)
                             } else {
-                                expandedWorkspaceIds.insert(workspace.workspaceId)
+                                expandedWorkspaceIds.insert(expansionID)
                             }
                         }
                     } label: {
@@ -348,9 +381,21 @@ struct SidebarView: View {
         }
     }
 
-    private func sessionRow(_ s: SessionSummary, subtitle: String? = nil) -> some View {
-        Button {
-            onSelectConversation(s.sessionId)
+    private func sessionRow(
+        _ s: SessionSummary,
+        subtitle: String? = nil,
+        serverID: UUID? = nil,
+        workspaceID: String? = nil
+    ) -> some View {
+        let targetServerID = serverID ?? model.activeServerID
+        let isCurrentServer = targetServerID == model.activeServerID
+        return Button {
+            if let targetServerID {
+                model.openSidebarSession(serverID: targetServerID, workspaceID: workspaceID, sessionID: s.sessionId)
+                onClose()
+            } else {
+                onSelectConversation(s.sessionId)
+            }
         } label: {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -370,7 +415,7 @@ struct SidebarView: View {
             .padding(.horizontal, 8)
             .frame(minHeight: subtitle == nil ? 32 : 40)
             .background(
-                model.selectedConversationId == s.sessionId
+                isCurrentServer && model.selectedConversationId == s.sessionId
                     ? Color.dsSurfaceSelected
                     : Color.clear,
                 in: RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -379,27 +424,37 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button("重命名", systemImage: "pencil") {
-                renameSessionTarget = s
-            }
-            Button("分支", systemImage: "arrow.branch") {
-                Task { await model.forkSession(sessionId: s.sessionId) }
-            }
-            Button("归档", systemImage: "archivebox", role: .destructive) {
-                Task {
-                    do { try await model.archiveSession(sessionId: s.sessionId) }
-                    catch { mutationError = error.localizedDescription }
+            if isCurrentServer {
+                Button("重命名", systemImage: "pencil") {
+                    renameSessionTarget = s
+                }
+                Button("分支", systemImage: "arrow.branch") {
+                    Task { await model.forkSession(sessionId: s.sessionId) }
+                }
+                Button("归档", systemImage: "archivebox", role: .destructive) {
+                    Task {
+                        do { try await model.archiveSession(sessionId: s.sessionId) }
+                        catch { mutationError = error.localizedDescription }
+                    }
                 }
             }
         }
     }
 
-    private var flatSessions: [SessionSummary] {
-        let visible = model.sessions.filter { !$0.blank && !model.archivedSessionIds.contains($0.sessionId) }
+    private func conversations(in workspace: Workspace, snapshot: ServerWorkspaceSnapshot) -> [SessionSummary] {
+        let visible = snapshot.sessions.filter {
+            workspace.sessionIds.contains($0.sessionId) && !$0.blank && !snapshot.archivedSessionIds.contains($0.sessionId)
+        }
+        if ordering == .lastUpdated { return visible.sorted { $0.updatedAt > $1.updatedAt } }
+        return workspace.sessionIds.compactMap { id in visible.first { $0.sessionId == id } }
+    }
+
+    private func flatSessions(in snapshot: ServerWorkspaceSnapshot) -> [SessionSummary] {
+        let visible = snapshot.sessions.filter { !$0.blank && !snapshot.archivedSessionIds.contains($0.sessionId) }
         if ordering == .lastUpdated { return visible.sorted { $0.updatedAt > $1.updatedAt } }
         var seen = Set<String>()
         var result: [SessionSummary] = []
-        for ws in model.workspaces {
+        for ws in snapshot.workspaces {
             for id in ws.sessionIds where !seen.contains(id) {
                 if let session = visible.first(where: { $0.sessionId == id }) {
                     seen.insert(id)

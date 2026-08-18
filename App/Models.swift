@@ -1,5 +1,33 @@
 import Foundation
 
+struct DshServer: Identifiable, Codable, Hashable {
+    let id: UUID
+    var name: String
+    var baseURLString: String
+    var hostID: String?
+
+    init(id: UUID = UUID(), name: String, baseURLString: String, hostID: String? = nil) {
+        self.id = id
+        self.name = name
+        self.baseURLString = baseURLString
+        self.hostID = hostID
+    }
+
+    var url: URL? {
+        URL(string: baseURLString.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, baseURLString, hostID }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try values.decode(String.self, forKey: .name)
+        baseURLString = try values.decode(String.self, forKey: .baseURLString)
+        hostID = try values.decodeIfPresent(String.self, forKey: .hostID)
+    }
+}
+
 extension JSONValue {
     var string: String? { if case .string(let s) = self { return s }; return nil }
     var double: Double? { if case .number(let n) = self { return n }; return nil }

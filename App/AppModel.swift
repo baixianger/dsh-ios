@@ -1,6 +1,21 @@
 import Foundation
 import Combine
 
+struct ServerWorkspaceSnapshot: Identifiable {
+    let server: DshServer
+    let workspaces: [Workspace]
+    let sessions: [SessionSummary]
+    let archivedSessionIds: Set<String>
+
+    var id: UUID { server.id }
+}
+
+private struct SidebarDestination {
+    let serverID: UUID
+    let workspaceID: String?
+    let sessionID: String?
+}
+
 @MainActor
 final class AppModel: ObservableObject {
     enum MainPresentation: Equatable {
@@ -13,6 +28,11 @@ final class AppModel: ObservableObject {
         didSet {
             guard baseURLString != oldValue else { return }
             UserDefaults.standard.set(baseURLString, forKey: "dshBaseURL")
+            if let activeServerID,
+               let index = servers.firstIndex(where: { $0.id == activeServerID }) {
+                servers[index].baseURLString = baseURLString
+                persistServers()
+            }
             client = DshClient(baseURL: URL(string: baseURLString) ?? URL(string: "http://127.0.0.1:3080")!)
 
             // Every one of these collections is scoped to a DSH host. Keeping
@@ -33,6 +53,8 @@ final class AppModel: ObservableObject {
             selectedWorkspaceId = nil
             selectedConversationId = nil
             mainPresentation = .welcome
+            connectionGeneration += 1
+            sidebarServers.removeAll { $0.server.id == activeServerID }
             Task {
                 await boot()
             }
@@ -40,6 +62,9 @@ final class AppModel: ObservableObject {
     }
 
     private(set) var client: DshClient
+    @Published private(set) var servers: [DshServer]
+    @Published private(set) var activeServerID: UUID?
+    @Published private(set) var sidebarServers: [ServerWorkspaceSnapshot] = []
     @Published var sessions: [SessionSummary] = []
     @Published var sessionsError: String?
     @Published var isLoadingSessions = false
@@ -75,6 +100,10 @@ final class AppModel: ObservableObject {
 
     private var openSessions: [String: SessionModel] = [:]
     private var eventTask: Task<Void, Never>?
+    private var connectionGeneration = 0
+    private var pendingSidebarDestination: SidebarDestination?
+    private static let serversKey = "dshServers.v1"
+    private static let activeServerKey = "dshActiveServerID.v1"
     /// Used only by the App Store capture scheme. It never reaches a host and
     /// is activated explicitly with `--store-screenshot-demo <screen>`.
     private let storeScreenshotDemoScreen: String?
@@ -86,9 +115,23 @@ final class AppModel: ObservableObject {
         } else {
             storeScreenshotDemoScreen = nil
         }
-        let stored = storeScreenshotDemoScreen == nil
-            ? (UserDefaults.standard.string(forKey: "dshBaseURL") ?? "http://127.0.0.1:3080")
-            : "https://harness-demo.tailnet"
+        let defaults = UserDefaults.standard
+        let loadedServers: [DshServer]
+        if storeScreenshotDemoScreen != nil {
+            loadedServers = [DshServer(name: "Studio Mac", baseURLString: "https://harness-demo.tailnet", hostID: "store-demo")]
+        } else if let data = defaults.data(forKey: Self.serversKey),
+                  let saved = try? JSONDecoder().decode([DshServer].self, from: data) {
+            loadedServers = saved
+        } else if let legacyURL = defaults.string(forKey: "dshBaseURL"), !legacyURL.isEmpty {
+            loadedServers = [DshServer(name: URL(string: legacyURL)?.host ?? "DSH Server", baseURLString: legacyURL)]
+        } else {
+            loadedServers = []
+        }
+        let savedID = defaults.string(forKey: Self.activeServerKey).flatMap(UUID.init(uuidString:))
+        let initialID = loadedServers.contains(where: { $0.id == savedID }) ? savedID : loadedServers.first?.id
+        let stored = loadedServers.first(where: { $0.id == initialID })?.baseURLString ?? "http://127.0.0.1:3080"
+        self.servers = loadedServers
+        self.activeServerID = initialID
         self.baseURLString = stored
         self.client = DshClient(baseURL: URL(string: stored) ?? URL(string: "http://127.0.0.1:3080")!)
         if storeScreenshotDemoScreen != nil { seedStoreScreenshotDemo() }
@@ -96,6 +139,13 @@ final class AppModel: ObservableObject {
 
     func boot() async {
         guard storeScreenshotDemoScreen == nil else { return }
+        guard activeServerID != nil else {
+            isOffline = true
+            return
+        }
+        let generation = connectionGeneration
+        await testConnection()
+        guard !isOffline, generation == connectionGeneration else { return }
         await loadSessions()
         await loadWorkspaces()
         await loadAgentPresets()
@@ -104,7 +154,118 @@ final class AppModel: ObservableObject {
         await loadModelCatalog()
         await loadPermission()
         await loadPlugins()
+        guard generation == connectionGeneration else { return }
         startEvents()
+        updateActiveSidebarSnapshot()
+        openPendingSidebarDestinationIfNeeded()
+        Task { await refreshInactiveSidebarServers() }
+    }
+
+    var activeServer: DshServer? {
+        servers.first { $0.id == activeServerID }
+    }
+
+    func addServer(name: String, baseURLString: String, hostID: String? = nil) {
+        let trimmedURL = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedURL.isEmpty else { return }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = trimmedName.isEmpty ? (URL(string: trimmedURL)?.host ?? "DSH Server") : trimmedName
+
+        if let index = servers.firstIndex(where: {
+            $0.baseURLString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ==
+                trimmedURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }) {
+            servers[index].name = displayName
+            if let hostID { servers[index].hostID = hostID }
+            persistServers()
+            activateServer(servers[index].id)
+            return
+        }
+
+        if let hostID,
+           let index = servers.firstIndex(where: { $0.hostID == hostID }) {
+            servers[index].name = displayName
+            servers[index].baseURLString = trimmedURL
+            persistServers()
+            activateServer(servers[index].id)
+            return
+        }
+
+        let server = DshServer(name: displayName, baseURLString: trimmedURL, hostID: hostID)
+        servers.append(server)
+        persistServers()
+        activateServer(server.id)
+    }
+
+    func connectDiscoveredHost(_ host: DiscoveredHost) {
+        addServer(name: host.label, baseURLString: host.baseURL.absoluteString, hostID: host.hostID)
+    }
+
+    func updateServer(_ server: DshServer, name: String, baseURLString: String) {
+        guard let index = servers.firstIndex(where: { $0.id == server.id }) else { return }
+        let trimmedURL = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedURL.isEmpty else { return }
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        servers[index].name = trimmedName.isEmpty ? (URL(string: trimmedURL)?.host ?? "DSH Server") : trimmedName
+        servers[index].baseURLString = trimmedURL
+        servers[index].hostID = nil
+        persistServers()
+        if activeServerID == server.id { activateServer(server.id) }
+    }
+
+    func removeServer(_ server: DshServer) {
+        servers.removeAll { $0.id == server.id }
+        sidebarServers.removeAll { $0.server.id == server.id }
+        persistServers()
+        if activeServerID == server.id { activateServer(servers.first?.id) }
+    }
+
+    func activateServer(_ id: UUID?) {
+        eventTask?.cancel()
+        connectionGeneration += 1
+        activeServerID = id
+        UserDefaults.standard.set(id?.uuidString, forKey: Self.activeServerKey)
+        guard let server = activeServer else {
+            resetServerState()
+            return
+        }
+        if baseURLString != server.baseURLString {
+            baseURLString = server.baseURLString
+        } else {
+            resetServerState()
+            Task { await boot() }
+        }
+    }
+
+    func openSidebarWorkspace(serverID: UUID, workspaceID: String) {
+        openSidebarDestination(SidebarDestination(serverID: serverID, workspaceID: workspaceID, sessionID: nil))
+    }
+
+    func openSidebarSession(serverID: UUID, workspaceID: String?, sessionID: String) {
+        openSidebarDestination(SidebarDestination(serverID: serverID, workspaceID: workspaceID, sessionID: sessionID))
+    }
+
+    private func openSidebarDestination(_ destination: SidebarDestination) {
+        if destination.serverID != activeServerID {
+            pendingSidebarDestination = destination
+            activateServer(destination.serverID)
+            return
+        }
+        if let workspaceID = destination.workspaceID { selectProject(workspaceID) }
+        if let sessionID = destination.sessionID { selectConversation(sessionID) }
+    }
+
+    private func openPendingSidebarDestinationIfNeeded() {
+        guard let destination = pendingSidebarDestination,
+              destination.serverID == activeServerID else { return }
+        pendingSidebarDestination = nil
+        openSidebarDestination(destination)
+    }
+
+    private func persistServers() {
+        if let data = try? JSONEncoder().encode(servers) {
+            UserDefaults.standard.set(data, forKey: Self.serversKey)
+        }
     }
 
     func loadPlugins() async {
@@ -200,6 +361,7 @@ final class AppModel: ObservableObject {
         } catch {
             sessionsError = String(describing: error)
             isOffline = true
+            sidebarServers.removeAll { $0.server.id == activeServerID }
         }
     }
 
@@ -403,12 +565,89 @@ final class AppModel: ObservableObject {
     func testConnection() async {
         do {
             let host: HostInfo = try await client.call("host.describe", as: HostInfo.self)
+            recordActiveHostIdentity(host.hostId)
             connectionInfo = "已连接 \(host.model ?? "?") @ \(host.cwd)"
             isOffline = false
+            updateActiveSidebarSnapshot()
         } catch {
             connectionInfo = "连接失败: \(error)"
             isOffline = true
+            sidebarServers.removeAll { $0.server.id == activeServerID }
         }
+    }
+
+    private func recordActiveHostIdentity(_ hostID: String?) {
+        guard let hostID, let activeServerID,
+              servers.contains(where: { $0.id == activeServerID }) else { return }
+        let duplicateIDs = Set(servers.filter { $0.id != activeServerID && $0.hostID == hostID }.map(\.id))
+        servers.removeAll { duplicateIDs.contains($0.id) }
+        sidebarServers.removeAll { duplicateIDs.contains($0.server.id) }
+        guard let updatedIndex = servers.firstIndex(where: { $0.id == activeServerID }) else { return }
+        servers[updatedIndex].hostID = hostID
+        persistServers()
+    }
+
+    private func resetServerState() {
+        eventTask?.cancel()
+        openSessions.removeAll()
+        sessions = []
+        workspaces = []
+        archivedSessionIds = []
+        agentPresets = []
+        providers = []
+        credentials = []
+        modelCatalog = []
+        plugins = []
+        pendingApprovals = []
+        pendingQuestions = []
+        selectedWorkspaceId = nil
+        selectedConversationId = nil
+        connectionInfo = nil
+        isOffline = activeServerID == nil
+        sidebarServers.removeAll { $0.server.id == activeServerID }
+        mainPresentation = .welcome
+    }
+
+    private func updateActiveSidebarSnapshot() {
+        guard !isOffline, let server = activeServer else { return }
+        let snapshot = ServerWorkspaceSnapshot(
+            server: server,
+            workspaces: workspaces,
+            sessions: sessions,
+            archivedSessionIds: archivedSessionIds
+        )
+        sidebarServers.removeAll { $0.server.id == server.id }
+        sidebarServers.insert(snapshot, at: 0)
+    }
+
+    private func refreshInactiveSidebarServers() async {
+        let generation = connectionGeneration
+        let inactive = servers.filter { $0.id != activeServerID }
+        var refreshed: [ServerWorkspaceSnapshot] = []
+
+        for server in inactive {
+            guard let url = server.url else { continue }
+            let probe = DshClient(baseURL: url)
+            do {
+                async let sessionValue = probe.call("session.list")
+                async let workspaceValue = probe.call("workspace.list")
+                let sessionsJSON = try await sessionValue
+                let workspaceJSON = try await workspaceValue
+                let projection = WorkspaceListProjection(json: workspaceJSON)
+                refreshed.append(ServerWorkspaceSnapshot(
+                    server: server,
+                    workspaces: projection.workspaces,
+                    sessions: (sessionsJSON["items"]?.array ?? []).compactMap(SessionSummary.init(json:)),
+                    archivedSessionIds: projection.archivedSessionIds
+                ))
+            } catch {
+                // Offline hosts deliberately disappear from the sidebar.
+            }
+        }
+
+        guard generation == connectionGeneration else { return }
+        let active = sidebarServers.first { $0.server.id == activeServerID }
+        sidebarServers = [active].compactMap { $0 } + refreshed
     }
 
     func sessionModel(for sessionId: String) -> SessionModel {
@@ -505,6 +744,7 @@ final class AppModel: ObservableObject {
             Task {
                 await loadSessions()
                 await loadWorkspaces()
+                updateActiveSidebarSnapshot()
             }
         default:
             break
