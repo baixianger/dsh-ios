@@ -13,6 +13,7 @@ targets:
       - Sources/DshClient
     settings:
       base:
+        DEVELOPMENT_TEAM: TN7ZDD72P2
         PRODUCT_BUNDLE_IDENTIFIER: com.baixianger.dshios
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
