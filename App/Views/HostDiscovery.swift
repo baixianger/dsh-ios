@@ -24,6 +24,7 @@ struct HostDiscovery {
         ("mac-mini", "http://mac-mini.tail849fa3.ts.net:8080"),
         ("macbook-air (IP)", "http://100.91.91.43:8080"),
         ("mac-mini (IP)", "http://100.123.131.117:8080"),
+        ("mac-mini", "https://mac-mini.tail849fa3.ts.net"),
     ]
 
     static func discover() async -> [DiscoveredHost] {

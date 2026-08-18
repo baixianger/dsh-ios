@@ -271,7 +271,7 @@ struct SettingsView: View {
 
                 Divider()
                 HStack {
-                    Button("测试连接", systemImage: "bolt.horizontal.circle") {
+                    Button("Test", systemImage: "bolt.horizontal.circle") {
                         Task { await model.testConnection() }
                     }
                     .buttonStyle(.bordered)
