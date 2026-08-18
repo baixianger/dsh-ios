@@ -20,9 +20,9 @@ iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议�
 
 ## 发现与连接
 
-- 同一家庭或局域网：App 通过 Bonjour（`_dsh._tcp`）自动发现正在发布该服务的 DSH Server。
-- 手动地址：可添加任何 iPhone 能访问的 HTTP/HTTPS Base URL，包括局域网地址和 Tailnet 地址。
-- Tailnet 不参与自动发现，需要用户在「设置 → 连接与配对 → 手动地址」中添加。
+- 扫码配对：App 扫描 Server Shell 生成的一次性二维码；LAN、Tailnet 和用户自行配置的 HTTPS Server 使用同一种格式。
+- 粘贴链接：相机不可用时可直接粘贴完整配对链接。
+- 手动地址：高级用户可添加任何 iPhone 能访问的既有 HTTP/HTTPS Base URL。
 
 ### 可选：通过 dsh-network 安全配对
 
@@ -71,7 +71,7 @@ iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议�
 说明：
 
 - App 默认连 http://127.0.0.1:3080（loopback 豁免 ATS）。
-- App 在家庭或局域网内通过 Bonjour 自动发现；局域网、Tailnet 或其他网络地址也都可以手动添加。
+- App 不进行后台网络发现；Server 通过二维码或配对链接明确交给用户，连接后按 Host ID 去重。
 - 通过 Tailnet 或公网远程访问时，优先扫描 `dsh-network` 生成的配对二维码；Tailnet
   不做自动发现。手动地址仍用于可信的既有部署。
 - DshClient（Sources/DshClient）同时被 SwiftPM 包（CLI spike）和 App 内联编译使用。
@@ -85,7 +85,7 @@ iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议�
 - 目标横幅（进行中/暂停/阻塞/完成 + 轮数）
 - 后台任务 + 子代理列表（session/jobs 帧 + subagent.list）
 - 审批卡片 + 提问表单（单选/多选）
-- 离线/断连提醒：检查 Server 在线状态，并提示局域网自动发现或手动添加其他网络地址
+- 离线/断连提醒：检查 Server 在线状态，并提示扫码、粘贴配对链接或手动添加地址
 - 深色模式（语义色自适应）
 
 设计参考：DSH web 客户端的消息/思考/工具/统计呈现逻辑，以及 Pharos 项目的零依赖 Markdown 渲染器与 MarkdownUI 表格样式（交替行 + 描边）。

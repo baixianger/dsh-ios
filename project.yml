@@ -31,9 +31,12 @@ targets:
         NSMicrophoneUsageDescription: 用于语音输入
         NSCameraUsageDescription: 用于扫描 DSH Server 的一次性配对二维码
         NSSpeechRecognitionUsageDescription: 用于将语音转换为文字
-        NSLocalNetworkUsageDescription: 用于发现并连接局域网中的 DSH Server
-        NSBonjourServices:
-          - _dsh._tcp
+        NSLocalNetworkUsageDescription: 用于连接用户选择的局域网 DSH Server
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.baixianger.dshios.pair
+            CFBundleURLSchemes:
+              - dsh
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
   DshAppTests:

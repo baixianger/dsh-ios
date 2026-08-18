@@ -719,8 +719,8 @@ struct OfflineReminderView: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 step(1, "确认运行 DSH 的主机（Mac / 服务器）在线")
-                step(2, "同一家庭或局域网可使用自动发现")
-                step(3, "Tailnet 或其他网络请在「设置」中手动添加可访问的 Base URL")
+                step(2, "在 Server 上生成二维码，或粘贴一次性配对链接")
+                step(3, "Tailnet 或其他网络也可在「设置」中手动添加可访问的 Base URL")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 

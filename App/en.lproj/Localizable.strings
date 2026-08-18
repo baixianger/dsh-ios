@@ -94,14 +94,7 @@
 "浅色" = "Light";
 "深色" = "Dark";
 "跟随系统" = "System";
-"自动发现同一家庭或局域网中的 DSH Server；其他地址（包括 Tailnet）可手动添加。" = "Discover DSH Servers automatically on your home or local network. Add other addresses, including Tailnet, manually.";
-"连接方式" = "Connection Method";
-"自动发现" = "Discovery";
-"手动地址" = "Manual Address";
 "保存并重连" = "Save and Reconnect";
-"正在发现 DSH 主机…" = "Discovering DSH hosts…";
-"未在当前局域网发现 DSH Server。Tailnet 或其他网络中的 Server 请使用“手动地址”添加。" = "No DSH Server was found on this local network. Use Manual Address for servers on a Tailnet or another network.";
-"重新扫描" = "Scan Again";
 "测试连接" = "Test Connection";
 "对此后新建的会话生效。运行中的会话保持它开始时的预设。" = "Applies to sessions you start from now on. Running sessions keep the preset they began with.";
 "不可用" = "Unavailable";
@@ -182,5 +175,5 @@
 "无法连接到 DeepSeek Harness" = "Unable to connect to DeepSeek Harness";
 "请确认 DSH Server 正在运行，并且本 iPhone 可以访问它的地址。" = "Make sure the DSH Server is running and this iPhone can reach its address.";
 "确认运行 DSH 的主机（Mac / 服务器）在线" = "Make sure the machine running DSH (Mac or server) is online";
-"同一家庭或局域网可使用自动发现" = "Use automatic discovery on the same home or local network";
-"Tailnet 或其他网络请在「设置」中手动添加可访问的 Base URL" = "For a Tailnet or another network, add a reachable Base URL manually in Settings";
+"在 Server 上生成二维码，或粘贴一次性配对链接" = "Generate a QR code on the Server, or paste a one-time pairing link";
+"Tailnet 或其他网络也可在「设置」中手动添加可访问的 Base URL" = "For a Tailnet or another network, you can also add a reachable Base URL manually in Settings";

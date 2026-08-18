@@ -36,7 +36,7 @@ struct DshNetworkPairingSheet: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                TextField("https://server/dsh-network/connect?ticket=…", text: $pairingURL)
+                TextField("https://server/dsh-network/connect#v=1&t=…", text: $pairingURL)
                     .textFieldStyle(.roundedBorder)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

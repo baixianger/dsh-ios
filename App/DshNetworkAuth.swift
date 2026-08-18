@@ -40,13 +40,15 @@ actor DshNetworkAuth {
     private let service = "com.baixianger.dshios.network"
 
     func pair(scannedURL: URL) async throws -> (baseURL: URL, result: DshNetworkPairingResult) {
-        guard let components = URLComponents(url: scannedURL, resolvingAgainstBaseURL: false),
+        let pairingURL = try Self.normalizedPairingURL(from: scannedURL)
+        guard let components = URLComponents(url: pairingURL, resolvingAgainstBaseURL: false),
               components.path == "/dsh-network/connect",
-              let ticket = components.queryItems?.first(where: { $0.name == "ticket" })?.value,
+              let ticket = pairingValue(named: "t", legacyName: "ticket", in: components),
               !ticket.isEmpty,
               var base = components.url else {
             throw DshNetworkAuthError.invalidPairingURL
         }
+        let expectedHostID = pairingValue(named: "h", legacyName: "hostId", in: components)
         var baseComponents = URLComponents(url: base, resolvingAgainstBaseURL: false)
         baseComponents?.path = ""
         baseComponents?.query = nil
@@ -57,17 +59,62 @@ actor DshNetworkAuth {
         var request = URLRequest(url: base.appendingPathComponent("dsh-network").appendingPathComponent("pair"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.httpBody = try JSONEncoder().encode(["ticket": ticket, "deviceName": "DSH iOS"])
+        var pairingBody = ["ticket": ticket, "deviceName": "DSH iOS"]
+        if let expectedHostID { pairingBody["hostId"] = expectedHostID }
+        request.httpBody = try JSONEncoder().encode(pairingBody)
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else { throw DshNetworkAuthError.rejected(status) }
         let result = try JSONDecoder().decode(DshNetworkPairingResult.self, from: data)
+        guard expectedHostID == nil || result.hostId == expectedHostID else {
+            throw DshNetworkAuthError.invalidPairingURL
+        }
         try save(StoredNetworkCredential(
             accessToken: result.accessToken,
             accessExpiresAt: result.accessExpiresAt,
             refreshToken: result.refreshToken
         ), key: result.hostId)
         return (base, result)
+    }
+
+    nonisolated static func normalizedPairingURL(from url: URL) throws -> URL {
+        guard url.scheme?.lowercased() == "dsh" else { return url }
+        guard url.host?.lowercased() == "pair",
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let ticket = fragmentValue(named: "t", in: components), !ticket.isEmpty,
+              let hostID = fragmentValue(named: "h", in: components), !hostID.isEmpty,
+              let originValue = fragmentValue(named: "u", in: components),
+              let origin = URL(string: originValue),
+              ["http", "https"].contains(origin.scheme?.lowercased() ?? ""),
+              origin.host != nil,
+              origin.user == nil,
+              origin.password == nil else {
+            throw DshNetworkAuthError.invalidPairingURL
+        }
+        var pairing = URLComponents(url: origin, resolvingAgainstBaseURL: false)
+        pairing?.path = "/dsh-network/connect"
+        pairing?.query = nil
+        var fragment = URLComponents()
+        fragment.queryItems = [
+            URLQueryItem(name: "v", value: "1"),
+            URLQueryItem(name: "t", value: ticket),
+            URLQueryItem(name: "h", value: hostID)
+        ]
+        pairing?.percentEncodedFragment = fragment.percentEncodedQuery
+        guard let pairingURL = pairing?.url else { throw DshNetworkAuthError.invalidPairingURL }
+        return pairingURL
+    }
+
+    private nonisolated static func fragmentValue(named name: String, in components: URLComponents) -> String? {
+        guard let fragment = components.fragment else { return nil }
+        var fragmentComponents = URLComponents()
+        fragmentComponents.query = fragment
+        return fragmentComponents.queryItems?.first(where: { $0.name == name })?.value
+    }
+
+    private func pairingValue(named name: String, legacyName: String, in components: URLComponents) -> String? {
+        if let value = Self.fragmentValue(named: name, in: components) { return value }
+        return components.queryItems?.first(where: { $0.name == legacyName })?.value
     }
 
     func authorization(for key: String, baseURL: URL) async -> String? {

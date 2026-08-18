@@ -28,7 +28,6 @@ private enum SettingsDestination: String, CaseIterable, Identifiable, Hashable {
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("serverManualMode") private var isManualMode = false
     @AppStorage("dsh.appearance") private var appearance = "system"
     @State private var selection: SettingsDestination? = .general
     @State private var baseURL = ""
@@ -48,14 +47,6 @@ struct SettingsView: View {
         }
         .onAppear {
             baseURL = model.baseURLString
-            if !isManualMode && model.discoveredHosts.isEmpty {
-                Task { await model.discoverHosts() }
-            }
-        }
-        .onChange(of: isManualMode) { _, manual in
-            if !manual && model.discoveredHosts.isEmpty {
-                Task { await model.discoverHosts() }
-            }
         }
         .sheet(item: $editingCredential) { credential in
             CredentialEditorSheet(credential: credential)
@@ -141,7 +132,7 @@ struct SettingsView: View {
     }
 
     private var connectionPage: some View {
-        settingsPage(title: "连接与配对", intro: "安装 dsh-network 后可在家庭或局域网自动发现；Tailnet 或公网 Server 可扫描同一种配对二维码。") {
+        settingsPage(title: "连接与配对", intro: "扫描 Server 生成的一次性二维码、粘贴配对链接，或手动添加已有 Server 地址。") {
             settingsCard {
                 HStack {
                     Text("DSH Servers").font(.headline)
@@ -215,85 +206,32 @@ struct SettingsView: View {
 
                 Divider()
 
-                Picker("连接方式", selection: $isManualMode) {
-                    Text("自动发现").tag(false)
-                    Text("手动地址").tag(true)
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Base URL").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                    TextField("https://host.example", text: $baseURL)
+                        .textFieldStyle(.roundedBorder)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
                 }
-                .pickerStyle(.segmented)
-
-                if isManualMode {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("Base URL").font(.caption.weight(.medium)).foregroundStyle(.secondary)
-                        TextField("https://host.example", text: $baseURL)
-                            .textFieldStyle(.roundedBorder)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                    }
-                    Button("保存并重连") {
-                        let value = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !value.isEmpty else { return }
-                        model.addServer(name: URL(string: value)?.host ?? "DSH Server", baseURLString: value)
-                    }
-                    .buttonStyle(.borderedProminent)
-                } else if model.isDiscovering {
-                    HStack(spacing: 9) {
-                        ProgressView().controlSize(.small)
-                        Text("正在发现 DSH 主机…").foregroundStyle(.secondary)
-                    }
-                } else if model.discoveredHosts.isEmpty {
-                    Text("未在当前局域网发现 DSH Server。Tailnet 或其他网络中的 Server 请使用“手动地址”添加。")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                    Button("重新扫描", systemImage: "arrow.clockwise") {
-                        Task { await model.discoverHosts() }
-                    }
-                    .buttonStyle(.bordered)
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(model.discoveredHosts) { host in
-                            Button {
-                                if host.requiresPairing {
-                                    isPairingServer = true
-                                } else {
-                                    model.connectDiscoveredHost(host)
-                                    baseURL = host.baseURL.absoluteString
-                                }
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "desktopcomputer").foregroundStyle(.secondary).frame(width: 24)
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(host.label).font(.subheadline.weight(.medium)).foregroundStyle(.primary)
-                                        Text(host.baseURL.absoluteString)
-                                            .font(.caption.monospaced()).foregroundStyle(.secondary).lineLimit(1)
-                                        if let cwd = host.cwd, !cwd.isEmpty {
-                                            Text(cwd).font(.caption2).foregroundStyle(.tertiary).lineLimit(1)
-                                        }
-                                    }
-                                    Spacer()
-                                    if host.requiresPairing {
-                                        Text("需要配对").font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    if model.activeServer?.hostID == host.hostID || model.baseURLString == host.baseURL.absoluteString {
-                                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                                    }
-                                }
-                                .padding(.vertical, 8).contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            if host.id != model.discoveredHosts.last?.id { Divider() }
-                        }
-                    }
+                Button("保存并重连") {
+                    let value = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !value.isEmpty else { return }
+                    model.addServer(name: URL(string: value)?.host ?? "DSH Server", baseURLString: value)
                 }
+                .buttonStyle(.borderedProminent)
 
                 Divider()
-                HStack {
-                    Button("Test", systemImage: "bolt.horizontal.circle") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Button("测试连接", systemImage: "bolt.horizontal.circle") {
                         Task { await model.testConnection() }
                     }
                     .buttonStyle(.bordered)
-                    Spacer()
                     if let info = model.connectionInfo {
-                        Text(info).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        Text(info)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }

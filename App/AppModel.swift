@@ -93,8 +93,6 @@ final class AppModel: ObservableObject {
     @Published var plugins: [PluginEntry] = []
     @Published var settingsError: String?
     @Published var operationError: String?
-    @Published var discoveredHosts: [DiscoveredHost] = []
-    @Published var isDiscovering = false
     @Published var permissionPreset: String?
     @Published var permissionRevision: Double = 0
 
@@ -208,10 +206,6 @@ final class AppModel: ObservableObject {
         servers.append(server)
         persistServers()
         activateServer(server.id)
-    }
-
-    func connectDiscoveredHost(_ host: DiscoveredHost) {
-        addServer(name: host.label, baseURLString: host.baseURL.absoluteString, hostID: host.hostID)
     }
 
     func pairNetworkServer(scannedURL: URL) async throws {
@@ -582,12 +576,6 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func discoverHosts() async {
-        isDiscovering = true
-        defer { isDiscovering = false }
-        discoveredHosts = await HostDiscovery.discover()
-    }
-
     func testConnection() async {
         do {
             let host: HostInfo = try await client.call("host.describe", as: HostInfo.self)
@@ -846,10 +834,6 @@ private extension AppModel {
             "settingsNs": .string("deepseek"),
             "active": .bool(true),
         ]))!]
-        discoveredHosts = [
-            DiscoveredHost(baseURL: URL(string: "http://studio-mac.local:3080")!, label: "Studio Mac", info: nil),
-            DiscoveredHost(baseURL: URL(string: "https://build-server.example")!, label: "Build server", info: nil),
-        ]
         permissionPreset = "read-only"
         selectedWorkspaceId = workspaces.first?.workspaceId
         connectionInfo = "Connected securely"
