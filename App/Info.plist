@@ -29,6 +29,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>用于发现并连接局域网中的 DSH Server</string>
+	<key>NSCameraUsageDescription</key>
+	<string>用于扫描 DSH Server 的一次性配对二维码</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>用于语音输入</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

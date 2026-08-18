@@ -33,7 +33,7 @@ final class AppModel: ObservableObject {
                 servers[index].baseURLString = baseURLString
                 persistServers()
             }
-            client = DshClient(baseURL: URL(string: baseURLString) ?? URL(string: "http://127.0.0.1:3080")!)
+            client = Self.makeClient(baseURLString: baseURLString, credentialKey: activeServer?.credentialKey)
 
             // Every one of these collections is scoped to a DSH host. Keeping
             // them when the URL changes makes Presets/Models look incomplete
@@ -133,7 +133,10 @@ final class AppModel: ObservableObject {
         self.servers = loadedServers
         self.activeServerID = initialID
         self.baseURLString = stored
-        self.client = DshClient(baseURL: URL(string: stored) ?? URL(string: "http://127.0.0.1:3080")!)
+        self.client = Self.makeClient(
+            baseURLString: stored,
+            credentialKey: loadedServers.first(where: { $0.id == initialID })?.credentialKey
+        )
         if storeScreenshotDemoScreen != nil { seedStoreScreenshotDemo() }
     }
 
@@ -165,7 +168,15 @@ final class AppModel: ObservableObject {
         servers.first { $0.id == activeServerID }
     }
 
-    func addServer(name: String, baseURLString: String, hostID: String? = nil) {
+    private static func makeClient(baseURLString: String, credentialKey: String?) -> DshClient {
+        let url = URL(string: baseURLString) ?? URL(string: "http://127.0.0.1:3080")!
+        guard let credentialKey else { return DshClient(baseURL: url) }
+        return DshClient(baseURL: url) {
+            await DshNetworkAuth.shared.authorization(for: credentialKey, baseURL: url)
+        }
+    }
+
+    func addServer(name: String, baseURLString: String, hostID: String? = nil, credentialKey: String? = nil) {
         let trimmedURL = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedURL.isEmpty else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -177,6 +188,7 @@ final class AppModel: ObservableObject {
         }) {
             servers[index].name = displayName
             if let hostID { servers[index].hostID = hostID }
+            if let credentialKey { servers[index].credentialKey = credentialKey }
             persistServers()
             activateServer(servers[index].id)
             return
@@ -186,12 +198,13 @@ final class AppModel: ObservableObject {
            let index = servers.firstIndex(where: { $0.hostID == hostID }) {
             servers[index].name = displayName
             servers[index].baseURLString = trimmedURL
+            if let credentialKey { servers[index].credentialKey = credentialKey }
             persistServers()
             activateServer(servers[index].id)
             return
         }
 
-        let server = DshServer(name: displayName, baseURLString: trimmedURL, hostID: hostID)
+        let server = DshServer(name: displayName, baseURLString: trimmedURL, hostID: hostID, credentialKey: credentialKey)
         servers.append(server)
         persistServers()
         activateServer(server.id)
@@ -199,6 +212,16 @@ final class AppModel: ObservableObject {
 
     func connectDiscoveredHost(_ host: DiscoveredHost) {
         addServer(name: host.label, baseURLString: host.baseURL.absoluteString, hostID: host.hostID)
+    }
+
+    func pairNetworkServer(scannedURL: URL) async throws {
+        let paired = try await DshNetworkAuth.shared.pair(scannedURL: scannedURL)
+        addServer(
+            name: paired.result.name,
+            baseURLString: paired.baseURL.absoluteString,
+            hostID: paired.result.hostId,
+            credentialKey: paired.result.hostId
+        )
     }
 
     func updateServer(_ server: DshServer, name: String, baseURLString: String) {
@@ -214,6 +237,9 @@ final class AppModel: ObservableObject {
     }
 
     func removeServer(_ server: DshServer) {
+        if let credentialKey = server.credentialKey {
+            Task { await DshNetworkAuth.shared.remove(key: credentialKey) }
+        }
         servers.removeAll { $0.id == server.id }
         sidebarServers.removeAll { $0.server.id == server.id }
         persistServers()

@@ -35,6 +35,7 @@ struct SettingsView: View {
     @State private var editingCredential: CredentialView?
     @State private var editingServer: DshServer?
     @State private var isAddingServer = false
+    @State private var isPairingServer = false
     @State private var pluginSearch = ""
 
     var body: some View {
@@ -64,6 +65,9 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $isAddingServer) {
             ServerEditorSheet(server: nil)
+        }
+        .sheet(isPresented: $isPairingServer) {
+            DshNetworkPairingSheet()
         }
         .alert("设置操作失败", isPresented: Binding(
             get: { model.settingsError != nil },
@@ -137,11 +141,16 @@ struct SettingsView: View {
     }
 
     private var connectionPage: some View {
-        settingsPage(title: "连接与配对", intro: "自动发现同一家庭或局域网中的 DSH Server；其他地址（包括 Tailnet）可手动添加。") {
+        settingsPage(title: "连接与配对", intro: "安装 dsh-network 后可在家庭或局域网自动发现；Tailnet 或公网 Server 可扫描同一种配对二维码。") {
             settingsCard {
                 HStack {
                     Text("DSH Servers").font(.headline)
                     Spacer()
+                    Button("扫码配对", systemImage: "qrcode.viewfinder") {
+                        isPairingServer = true
+                    }
+                    .labelStyle(.iconOnly)
+                    .accessibilityLabel("扫描 DSH Server 配对二维码")
                     Button("添加", systemImage: "plus") {
                         isAddingServer = true
                     }
@@ -243,8 +252,12 @@ struct SettingsView: View {
                     VStack(spacing: 0) {
                         ForEach(model.discoveredHosts) { host in
                             Button {
-                                model.connectDiscoveredHost(host)
-                                baseURL = host.baseURL.absoluteString
+                                if host.requiresPairing {
+                                    isPairingServer = true
+                                } else {
+                                    model.connectDiscoveredHost(host)
+                                    baseURL = host.baseURL.absoluteString
+                                }
                             } label: {
                                 HStack(spacing: 12) {
                                     Image(systemName: "desktopcomputer").foregroundStyle(.secondary).frame(width: 24)
@@ -257,6 +270,9 @@ struct SettingsView: View {
                                         }
                                     }
                                     Spacer()
+                                    if host.requiresPairing {
+                                        Text("需要配对").font(.caption).foregroundStyle(.secondary)
+                                    }
                                     if model.activeServer?.hostID == host.hostID || model.baseURLString == host.baseURL.absoluteString {
                                         Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                                     }

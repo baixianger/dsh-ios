@@ -5,10 +5,22 @@ import Foundation
 public struct DshClient: Sendable {
     public let baseURL: URL
     private let session: URLSession
+    private let authorizationProvider: (@Sendable () async -> String?)?
 
-    public init(baseURL: URL, session: URLSession = .shared) {
+    public init(
+        baseURL: URL,
+        session: URLSession = .shared,
+        authorizationProvider: (@Sendable () async -> String?)? = nil
+    ) {
         self.baseURL = baseURL
         self.session = session
+        self.authorizationProvider = authorizationProvider
+    }
+
+    private func authorize(_ request: inout URLRequest) async {
+        if let value = await authorizationProvider?() {
+            request.setValue(value, forHTTPHeaderField: "authorization")
+        }
     }
 
     /// Raw unary RPC: POST /api/{method}, return the result value as JSONValue.
@@ -17,6 +29,7 @@ public struct DshClient: Sendable {
             .appendingPathComponent("api")
             .appendingPathComponent(method)
         var request = URLRequest(url: url)
+        await authorize(&request)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try JSONEncoder().encode(ClientRequest(method: method, payload: payload))
@@ -50,6 +63,7 @@ public struct DshClient: Sendable {
             .appendingPathComponent(namespace)
             .appendingPathComponent(method)
         var req = URLRequest(url: url)
+        await authorize(&req)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         let payload = JSONValue.object(["args": args])
@@ -76,6 +90,7 @@ public struct DshClient: Sendable {
         components?.queryItems = [URLQueryItem(name: "sessionId", value: sessionId)]
         guard let url = components?.url else { throw DshError.badWebSocketURL }
         var request = URLRequest(url: url)
+        await authorize(&request)
         request.httpMethod = "GET"
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -92,6 +107,7 @@ public struct DshClient: Sendable {
             .appendingPathComponent("api")
             .appendingPathComponent("respond")
         var request = URLRequest(url: url)
+        await authorize(&request)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try JSONEncoder().encode(ClientResponse(rpcId: rpcId, value: value))
@@ -127,10 +143,12 @@ public struct DshClient: Sendable {
                 return
             }
 
-            let socket = session.webSocketTask(with: wsURL)
-            socket.resume()
-
             let receiver = Task {
+                var request = URLRequest(url: wsURL)
+                await authorize(&request)
+                let socket = session.webSocketTask(with: request)
+                socket.resume()
+                defer { socket.cancel(with: .goingAway, reason: nil) }
                 let decoder = JSONDecoder()
                 do {
                     while !Task.isCancelled {
@@ -148,7 +166,6 @@ public struct DshClient: Sendable {
 
             continuation.onTermination = { @Sendable _ in
                 receiver.cancel()
-                socket.cancel(with: .goingAway, reason: nil)
             }
         }
     }

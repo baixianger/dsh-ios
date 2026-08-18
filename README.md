@@ -24,22 +24,21 @@ iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议�
 - 手动地址：可添加任何 iPhone 能访问的 HTTP/HTTPS Base URL，包括局域网地址和 Tailnet 地址。
 - Tailnet 不参与自动发现，需要用户在「设置 → 连接与配对 → 手动地址」中添加。
 
-### 可选：iPhone 通过 Tailscale 连接
+### 可选：通过 dsh-network 安全配对
 
-1. 服务器（Mac）上把 3080 安全地暴露到 tailnet。DSH 官方禁止 --host 0.0.0.0，
-   所以用 Tailscale 反向代理，而不是改 DSH 绑定：
+1. 在 Server 的 web profile 安装 `dsh-network`。插件继续让 DSH 只监听 loopback，
+   另开带鉴权的 Gateway；不要把 3080 直接暴露到局域网或公网。
 
-    tailscale serve --bg https / http://127.0.0.1:3080
+    dsh plugin --profile web add dsh-network
 
-   （或者 Caddy/nginx 反代 + 自签 TLS + Bearer token。记住：/api 本身零鉴权，
-   只靠 loopback 兜底，绝不能裸暴露。）
+2. Tailnet Server 运行 setup。它把 Tailscale Serve 指向安全 Gateway，并在 Shell
+   显示一个 5 分钟、仅可使用一次的二维码：
 
-2. 告诉 DSH 信任 tailnet 域名（原生客户端不带 Origin 头，靠 Host 过信任检查）：
+    dsh-network setup
 
-    dsh --profile web --trusted-host <你的 tailnet 域名或 host:port>
-
-3. 在 iOS App 的「设置 → 连接与配对 → 手动地址」中添加
-   https://<tailnet-域名>（wss 事件流自动走 443）。
+3. 在 iOS App 的「设置 → 连接与配对」点二维码按钮并扫描。短期 access token 与
+   可轮换 refresh token 存在 Keychain；过期后 App 自动续期。浏览器也能打开同一
+   张二维码，换取 HttpOnly、Secure 的会话 Cookie。
 
 ## 目录
 
@@ -73,8 +72,8 @@ iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议�
 
 - App 默认连 http://127.0.0.1:3080（loopback 豁免 ATS）。
 - App 在家庭或局域网内通过 Bonjour 自动发现；局域网、Tailnet 或其他网络地址也都可以手动添加。
-- 通过 Tailnet 远程访问时，手动添加 https://<tailnet 域名>（走 tailscale serve 的 HTTPS），
-  服务器需加 --trusted-host；Tailnet 不做自动发现。
+- 通过 Tailnet 或公网远程访问时，优先扫描 `dsh-network` 生成的配对二维码；Tailnet
+  不做自动发现。手动地址仍用于可信的既有部署。
 - DshClient（Sources/DshClient）同时被 SwiftPM 包（CLI spike）和 App 内联编译使用。
 
 ## 功能清单

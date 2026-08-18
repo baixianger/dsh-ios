@@ -7,14 +7,22 @@ struct DiscoveredHost: Identifiable {
     let hostID: String?
     let model: String?
     let cwd: String?
+    let requiresPairing: Bool
 
-    init(baseURL: URL, label: String, info: HostInfo?) {
+    init(baseURL: URL, label: String, info: HostInfo?, hostID: String? = nil, requiresPairing: Bool = false) {
         self.baseURL = baseURL
         self.label = label
-        self.hostID = info?.hostId
+        self.hostID = hostID ?? info?.hostId
         self.model = info?.model
         self.cwd = info?.cwd
+        self.requiresPairing = requiresPairing
     }
+}
+
+private struct NetworkGatewayInfo: Decodable {
+    let hostId: String
+    let name: String
+    let requiresPairing: Bool
 }
 
 struct HostDiscovery {
@@ -30,12 +38,31 @@ struct HostDiscovery {
 
         var results: [DiscoveredHost] = []
         for (label, url) in discovered {
-            if let info = await probe(url: url, session: session) {
+            if let gateway = await probeGateway(url: url, session: session) {
+                results.append(DiscoveredHost(
+                    baseURL: url,
+                    label: gateway.name.isEmpty ? label : gateway.name,
+                    info: nil,
+                    hostID: gateway.hostId,
+                    requiresPairing: gateway.requiresPairing
+                ))
+            } else if let info = await probe(url: url, session: session) {
                 results.append(DiscoveredHost(baseURL: url, label: label, info: info))
             }
         }
         var seen = Set<String>()
         return results.filter { seen.insert($0.id).inserted }
+    }
+
+    private static func probeGateway(url: URL, session: URLSession) async -> NetworkGatewayInfo? {
+        do {
+            let endpoint = url.appendingPathComponent("dsh-network").appendingPathComponent("info")
+            let (data, response) = try await session.data(from: endpoint)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            return try JSONDecoder().decode(NetworkGatewayInfo.self, from: data)
+        } catch {
+            return nil
+        }
     }
 
     static func probe(url: URL, session: URLSession) async -> HostInfo? {
