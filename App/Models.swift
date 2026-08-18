@@ -3,13 +3,15 @@ import Foundation
 struct DshServer: Identifiable, Codable, Hashable {
     let id: UUID
     var name: String
+    var alias: String?
     var baseURLString: String
     var hostID: String?
     var credentialKey: String?
 
-    init(id: UUID = UUID(), name: String, baseURLString: String, hostID: String? = nil, credentialKey: String? = nil) {
+    init(id: UUID = UUID(), name: String, alias: String? = nil, baseURLString: String, hostID: String? = nil, credentialKey: String? = nil) {
         self.id = id
         self.name = name
+        self.alias = alias
         self.baseURLString = baseURLString
         self.hostID = hostID
         self.credentialKey = credentialKey
@@ -19,12 +21,18 @@ struct DshServer: Identifiable, Codable, Hashable {
         URL(string: baseURLString.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, baseURLString, hostID, credentialKey }
+    var displayName: String {
+        let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? name : trimmed
+    }
+
+    enum CodingKeys: String, CodingKey { case id, name, alias, baseURLString, hostID, credentialKey }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
         name = try values.decode(String.self, forKey: .name)
+        alias = try values.decodeIfPresent(String.self, forKey: .alias)
         baseURLString = try values.decode(String.self, forKey: .baseURLString)
         hostID = try values.decodeIfPresent(String.self, forKey: .hostID)
         credentialKey = try values.decodeIfPresent(String.self, forKey: .credentialKey)

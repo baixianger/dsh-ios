@@ -96,6 +96,10 @@
 "跟随系统" = "System";
 "保存并重连" = "Save and Reconnect";
 "测试连接" = "Test Connection";
+"设置 Host 别名" = "Set Host Alias";
+"清除别名" = "Clear Alias";
+"别名" = "Alias";
+"别名（仅此 iPhone）" = "Alias (this iPhone only)";
 "对此后新建的会话生效。运行中的会话保持它开始时的预设。" = "Applies to sessions you start from now on. Running sessions keep the preset they began with.";
 "不可用" = "Unavailable";
 "填入各提供方的 API 密钥即可使用其模型。" = "Enter your API keys to use models from the following providers.";

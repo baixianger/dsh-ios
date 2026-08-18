@@ -9,6 +9,7 @@ struct SidebarView: View {
     @State private var newProjectPath = ""
     @State private var renameTarget: Workspace?
     @State private var renameSessionTarget: SessionSummary?
+    @State private var renameServerTarget: DshServer?
     @State private var query = ""
     @State private var showsSearch = false
     @State private var expandedWorkspaceIds: Set<String> = []
@@ -84,7 +85,11 @@ struct SidebarView: View {
                         }
                     } else {
                         HStack(spacing: 4) {
-                            sectionTitle(sidebarSnapshots.first?.server.name ?? String(localized: "工作区"))
+                            if let server = sidebarSnapshots.first?.server {
+                                hostSectionTitle(server)
+                            } else {
+                                sectionTitle(String(localized: "工作区"))
+                            }
                             Spacer()
                             Button {
                                 withAnimation(.easeInOut(duration: 0.18)) {
@@ -143,7 +148,7 @@ struct SidebarView: View {
                         } else {
                             ForEach(Array(sidebarSnapshots.enumerated()), id: \.element.id) { index, snapshot in
                                 if index > 0 {
-                                    sectionTitle(snapshot.server.name)
+                                    hostSectionTitle(snapshot.server)
                                 }
                                 if grouping == .grouped {
                                     ForEach(snapshot.workspaces) { workspace in
@@ -217,6 +222,15 @@ struct SidebarView: View {
                 try await model.renameSession(sessionId: target.sessionId, title: value)
             }
         }
+        .sheet(item: $renameServerTarget) { server in
+            RenameEntitySheet(
+                title: "设置 Host 别名",
+                fieldLabel: "别名",
+                initialValue: server.displayName
+            ) { value in
+                model.setServerAlias(serverID: server.id, alias: value)
+            }
+        }
         .alert("删除工作区？", isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } })) {
             Button("删除", role: .destructive) {
                 guard let target = deleteTarget else { return }
@@ -276,6 +290,23 @@ struct SidebarView: View {
             .foregroundStyle(.primary)
             .padding(.top, 18)
             .padding(.bottom, 10)
+    }
+
+    private func hostSectionTitle(_ server: DshServer) -> some View {
+        sectionTitle(server.displayName)
+            .contextMenu {
+                Button("设置 Host 别名", systemImage: "pencil") {
+                    renameServerTarget = server
+                }
+                if server.alias != nil {
+                    Button("清除别名", systemImage: "arrow.uturn.backward") {
+                        model.setServerAlias(serverID: server.id, alias: nil)
+                    }
+                }
+            }
+            .accessibilityAction(named: "设置 Host 别名") {
+                renameServerTarget = server
+            }
     }
 
     private func emptyRow(_ title: LocalizedStringKey) -> some View {

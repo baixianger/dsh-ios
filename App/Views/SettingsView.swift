@@ -166,7 +166,7 @@ struct SettingsView: View {
                                             .foregroundStyle(.secondary)
                                             .frame(width: 24)
                                         VStack(alignment: .leading, spacing: 3) {
-                                            Text(server.name)
+                                            Text(server.displayName)
                                                 .font(.subheadline.weight(.medium))
                                                 .foregroundStyle(.primary)
                                             Text(server.baseURLString)
@@ -196,7 +196,7 @@ struct SettingsView: View {
                                         .foregroundStyle(.secondary)
                                         .frame(width: 32, height: 32)
                                 }
-                                .accessibilityLabel("管理 \(server.name)")
+                                .accessibilityLabel("管理 \(server.displayName)")
                             }
                             .padding(.vertical, 8)
                             if server.id != model.servers.last?.id { Divider() }
@@ -592,7 +592,7 @@ private struct ServerEditorSheet: View {
 
     init(server: DshServer?) {
         self.server = server
-        _name = State(initialValue: server?.name ?? "")
+        _name = State(initialValue: server?.displayName ?? "")
         _baseURLString = State(initialValue: server?.baseURLString ?? "")
     }
 
@@ -600,7 +600,7 @@ private struct ServerEditorSheet: View {
         NavigationStack {
             Form {
                 Section("DSH Server") {
-                    TextField("名称", text: $name)
+                    TextField(server == nil ? "名称" : "别名（仅此 iPhone）", text: $name)
                     TextField("https://host.example", text: $baseURLString)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()

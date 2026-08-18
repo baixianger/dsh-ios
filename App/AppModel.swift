@@ -223,11 +223,34 @@ final class AppModel: ObservableObject {
         let trimmedURL = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedURL.isEmpty else { return }
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        servers[index].name = trimmedName.isEmpty ? (URL(string: trimmedURL)?.host ?? "DSH Server") : trimmedName
+        servers[index].alias = trimmedName.isEmpty || trimmedName == servers[index].name ? nil : trimmedName
+        let routeChanged = servers[index].baseURLString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) !=
+            trimmedURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         servers[index].baseURLString = trimmedURL
-        servers[index].hostID = nil
+        if routeChanged { servers[index].hostID = nil }
         persistServers()
+        refreshServerSnapshots(for: servers[index])
         if activeServerID == server.id { activateServer(server.id) }
+    }
+
+    func setServerAlias(serverID: UUID, alias: String?) {
+        guard let index = servers.firstIndex(where: { $0.id == serverID }) else { return }
+        let trimmed = alias?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        servers[index].alias = trimmed.isEmpty || trimmed == servers[index].name ? nil : trimmed
+        persistServers()
+        refreshServerSnapshots(for: servers[index])
+    }
+
+    private func refreshServerSnapshots(for server: DshServer) {
+        sidebarServers = sidebarServers.map { snapshot in
+            guard snapshot.server.id == server.id else { return snapshot }
+            return ServerWorkspaceSnapshot(
+                server: server,
+                workspaces: snapshot.workspaces,
+                sessions: snapshot.sessions,
+                archivedSessionIds: snapshot.archivedSessionIds
+            )
+        }
     }
 
     func removeServer(_ server: DshServer) {
