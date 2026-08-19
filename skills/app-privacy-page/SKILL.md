@@ -18,7 +18,9 @@ App Store locale.
 3. Write only claims supported by that audit. If data handling is uncertain,
    stop and ask the owner rather than claim “no data collected”.
 4. Deploy and `curl` the exact HTTPS privacy URL before Fastlane metadata
-   upload. Re-audit for each material product or SDK change.
+   upload. Prefer the project's own product page; if it has none, publish the
+   factory page to that repository's GitHub Pages and use its HTTPS URL.
+   Re-audit for each material product or SDK change.
 
 The factory has no publisher name, contact, domain, analytics statement, or
 data claim. Those are user-provided project facts.
