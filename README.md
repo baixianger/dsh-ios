@@ -1,91 +1,151 @@
-# dsh-ios — DeepSeek Harness iOS 客户端（spike）
+# Pocket Dolphin · DSH
 
-对 DeepSeek Harness web 后端（http://127.0.0.1:3080）的一个原生 Swift 客户端骨架。
-iOS 端和 web 前端是**平等的两个 peer 客户端**，走同一条协议：
+<p align="center">
+  <strong>A native iPhone and iPad client for the DSH host you already run.</strong><br>
+  Free, open source, and deliberately small in scope.
+</p>
 
-- 调用：POST /api/{method}
-  请求  { "type":"client-request", "rpcId":"...", "method":"session.list", "payload":{} }
-  响应  { "type":"server-response", "rpcId":"...", "result":{ "ok":true, "value":{...} } }
-- 事件：下行专用 WebSocket
-  ws://host/api/events.mux  （会话事件 / 审批 / 提问 / 队列 / 投影）
-  ws://host/api/events.host （会话增删改 / workspace / 代理错误）
-  每条文本帧 = { "type":"server-request", "rpcId":"...", "method":"session/subscribed", "payload":{...} }
+<p align="center">
+  <a href="https://impai.me/apps/dsh-remote/">Website</a> ·
+  <a href="https://apps.apple.com/app/id6802863224">App Store</a> ·
+  <a href="https://impai.me/apps/dsh-remote/privacy.html">Privacy</a> ·
+  <a href="#run-it">Run it</a> ·
+  <a href="#development">Development</a>
+</p>
 
-## 本机跑 spike
+> **Independent project.** Pocket Dolphin · DSH is an unofficial client for DeepSeek Harness. It is not affiliated with, endorsed by, or sponsored by DeepSeek.
 
-    swift run dsh-spike
-    swift run dsh-spike http://127.0.0.1:3080
+## What it is
 
-输出：host.describe（typed）、session.list（raw JSON）、events.mux 前若干帧。
+Pocket Dolphin · DSH brings a self-hosted DSH session to iPhone and iPad. Pair the app with a host you control, browse its workspaces and sessions, and read or continue a conversation without putting another service in the middle.
 
-## 发现与连接
+The app is for people who already operate a DSH host. It does not provide a hosted model, account system, relay, or cloud sync service.
 
-- 扫码配对：App 扫描 DSH Host 终端生成的一次性二维码；LAN、Tailnet 和用户自行配置的 HTTPS Host 使用同一种格式。
-- 粘贴链接：相机不可用时可直接粘贴完整配对链接。
-- 手动地址：高级用户可添加任何 iPhone 能访问的既有 HTTP/HTTPS Base URL。
+## What it does
 
-### 可选：通过 dsh-network 安全配对
+- Pair with a DSH host by one-time QR code, pairing link, or a manual address.
+- Keep multiple hosts and their workspaces separate.
+- Browse and continue sessions with streaming replies, reasoning, tools, approvals, questions, goals, and subagents.
+- Render Markdown, code blocks, tables, and tool output in a native SwiftUI interface.
+- Work on both iPhone and iPad, including a full workspace sidebar on iPad.
+- Store host credentials in the iOS Keychain and retain local UI preferences on-device.
 
-1. 在 DSH Host 的 web profile 安装 `dsh-network`。插件继续让 DSH 只监听 loopback，
-   另开带鉴权的 Gateway；不要把 3080 直接暴露到局域网或公网。
+## Privacy by design
 
-    dsh plugin --profile web add dsh-network
+Pocket Dolphin · DSH connects directly to the address you pair or configure. Prompts, responses, session metadata, and credentials are sent only to that selected host as part of the requested interaction.
 
-2. Tailnet Host 运行 setup。它把 Tailscale Serve 指向安全 Gateway，并在终端
-   显示一个 5 分钟、仅可使用一次的二维码：
+There are no accounts, ads, analytics SDKs, telemetry, or cross-app tracking. The app does not operate a relay and does not send session data through `impai.me`.
 
-    dsh-network setup
+Read the full [privacy policy](https://impai.me/apps/dsh-remote/privacy.html).
 
-3. 在 iOS App 的「设置 → 连接与配对」点二维码按钮并扫描。短期 access token 与
-   可轮换 refresh token 存在 Keychain；过期后 App 自动续期。浏览器也能打开同一
-   张二维码，换取 HttpOnly、Secure 的会话 Cookie。
+## Connection model
 
-## 目录
+```text
+iPhone / iPad ── direct HTTPS, LAN, or Tailnet connection ──► your DSH host
+                                                               │
+                                                               └── models and tools configured by you
+```
 
-    Sources/DshClient/JSONValue.swift  无损 JSON 值
-    Sources/DshClient/Wire.swift       RPC 信封 / 错误 / typed 模型
-    Sources/DshClient/DshClient.swift  call() + mux/host 事件流
-    Sources/dsh-spike/main.swift       CLI 冒烟测试
+For remote access, use a trusted network path. The optional [`dsh-network`](https://www.npmjs.com/package/dsh-network) Host plugin keeps the DSH service on loopback and presents a short-lived pairing QR code through an authenticated gateway; it is preferred over exposing a development port directly to a LAN or the public internet.
 
-## iOS App（SwiftUI 客户端）
+## Configure the Host with `dsh-network`
 
-完整的原生 App，和 web 前端是平等的 peer 客户端。
+[`dsh-network` on npm](https://www.npmjs.com/package/dsh-network) is an independent DSH Host plugin for secure LAN, Tailnet, and existing public HTTPS routes. It keeps DSH on `127.0.0.1:3080` and serves the authenticated client gateway on `3081`.
 
-目录：
+Install it in the DSH web profile and start DSH:
 
-    App/DshApp.swift                  入口（@main）
-    App/AppModel.swift                根状态：baseURL、会话列表、事件桥、审批/提问
-    App/SessionModel.swift            单会话：历史折叠、流式、发送
-    App/Models.swift                  会话/消息/审批/提问模型
-    App/Views/…                       会话列表、聊天、气泡、输入框、审批/提问卡片、设置
+```sh
+dsh plugin --profile web add dsh-network@next
+dsh web
+```
 
-构建与运行（xcodegen 生成工程，不提交 .xcodeproj）：
+Then choose the route to encode in a one-time pairing QR code:
 
-    xcodegen generate
-    open DshApp.xcodeproj              # 在 Xcode 里跑
+```sh
+dsh plugin --profile web exec dsh-network setup
 
-命令行构建（模拟器）：
+# or choose explicitly
+npx dsh-network setup lan
+npx dsh-network setup tailscale
+npx dsh-network setup custom --url https://dsh.example.com
+```
 
-    xcodebuild -project DshApp.xcodeproj -scheme DshApp       -destination 'generic/platform=iOS Simulator' build
+For LAN use, the pairing URL can be HTTP within the trusted local network. For Tailnet, `dsh-network` configures Tailscale Serve. For a public host, bring your own HTTPS reverse proxy and generate a pairing QR with its final HTTPS address. Do not expose the DSH development port `3080` to the public internet.
 
-说明：
+## Run it
 
-- App 默认连 http://127.0.0.1:3080（loopback 豁免 ATS）。
-- App 不进行后台网络发现；Host 通过二维码或配对链接明确交给用户，连接后按 Host ID 去重。
-- 通过 Tailnet 或公网远程访问时，优先扫描 `dsh-network` 生成的配对二维码；Tailnet
-  不做自动发现。手动地址仍用于可信的既有部署。
-- DshClient（Sources/DshClient）同时被 SwiftPM 包（CLI spike）和 App 内联编译使用。
+Requirements:
 
-## 功能清单
+- macOS with Xcode 16 or newer
+- [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+- iOS 17 or newer for the app target
+- An accessible DSH host
 
-- 会话列表（标题/目录/运行中指示，实时更新）
-- 聊天：Markdown 渲染（标题/列表/代码块带复制/GFM 表格）、思考过程折叠、工具调用+结果卡片、流式双通道（正文 + reasoning）
-- 统计栏：轮数/步数、LLM/工具耗时、首 token、tok/s、输入/输出 token
-- 模型切换（session.models / session.selectModel，含 reasoning effort）
-- 目标横幅（进行中/暂停/阻塞/完成 + 轮数）
-- 后台任务 + 子代理列表（session/jobs 帧 + subagent.list）
-- 审批卡片 + 提问表单（单选/多选）
-- 离线/断连提醒：检查 Host 在线状态，并提示扫码、粘贴配对链接或手动添加地址
-- 深色模式（语义色自适应）
+Generate the Xcode project and run it on a simulator or device:
 
-设计参考：DSH web 客户端的消息/思考/工具/统计呈现逻辑，以及 Pharos 项目的零依赖 Markdown 渲染器与 MarkdownUI 表格样式（交替行 + 描边）。
+```sh
+cd dsh-ios
+xcodegen generate
+open DshApp.xcodeproj
+```
+
+You can also build from the command line:
+
+```sh
+xcodebuild \
+  -project DshApp.xcodeproj \
+  -scheme DshApp \
+  -destination 'generic/platform=iOS Simulator' \
+  build
+```
+
+### Pair a host
+
+1. Start or select the DSH host you trust.
+2. In Pocket Dolphin · DSH, scan its one-time pairing QR code, paste its pairing link, or enter its base URL manually.
+3. Select the host and open a workspace or session.
+
+When a host supports [`dsh-network`](https://www.npmjs.com/package/dsh-network), scan the QR code printed by its setup command. The access token is short-lived; refresh credentials are stored in Keychain.
+
+## Development
+
+The repository contains both the native app and a lightweight Swift client library.
+
+```text
+App/                 SwiftUI app, state, pairing, networking, and views
+Sources/DshClient/   RPC and event-stream client shared with the CLI spike
+Tests/               Unit tests for transcript, workspace, host, and auth behavior
+assets/store/        App Store screenshots, review sheet, site source, and exports
+fastlane/            TestFlight and App Store metadata automation
+project.yml          XcodeGen project definition
+```
+
+The app and the DSH web client are peer clients of the same host protocol:
+
+- RPC: `POST /api/{method}`
+- Event streams: `ws://host/api/events.mux` and `ws://host/api/events.host`
+
+For a small protocol smoke test:
+
+```sh
+swift run dsh-spike http://127.0.0.1:3080
+```
+
+## App Store materials
+
+The repository keeps the source pages, generated App Store screenshots, product page, and privacy page under [`assets/store`](assets/store). Review the asset bundle locally with:
+
+```sh
+open assets/store/review.html
+open assets/store/site/index.html
+```
+
+The published product page is available at [impai.me/apps/dsh-remote](https://impai.me/apps/dsh-remote/).
+
+## Contributing
+
+Issues and focused pull requests are welcome. Please keep changes compatible with a user-controlled host, avoid adding tracking or a relay, and do not introduce DeepSeek trademarks or official visual assets without authorization.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

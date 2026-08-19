@@ -1,0 +1,10 @@
+Pocket Dolphin · DSH connects to the DSH host you choose, so you can continue your work from iPhone and iPad.
+
+• Pair with your own DSH host
+• Browse workspaces and sessions
+• Read and continue conversations
+• Use the same host across your devices
+
+Pocket Dolphin · DSH is free and open source. It is an unofficial client for DeepSeek Harness and is not affiliated with DeepSeek.
+
+Source code: https://github.com/baixianger/dsh-ios

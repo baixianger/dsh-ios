@@ -1,4 +1,17 @@
 require 'spaceship'
+require 'dotenv'
+
+# Local developer identity is kept separately from the shared release config.
+# `fastlane/.env.local` is ignored by Git and may contain FASTLANE_USER.
+Dotenv.load(File.expand_path('.env.local', __dir__))
+
+APP_IDENTIFIER = "me.impai.dsh"
+TEAM_ID = "TN7ZDD72P2"
+SCHEME = "DshApp"
+XCODEPROJ = File.expand_path("../DshApp.xcodeproj", __dir__)
+APP_NAME = "Pocket Dolphin · DSH"
+APP_VERSION = "1.0"
+APP_SKU = "me.impai.dsh"
 
 def with_env_unset(*keys)
   saved = keys.each_with_object({}) { |k, h| h[k] = ENV.delete(k) }
@@ -16,17 +29,73 @@ def asc_api_key
   )
 end
 
+def ensure_project
+  sh "cd .. && xcodegen generate"
+end
+
+# `produce` is the one fastlane action that creates the App Store Connect
+# record. Apple requires an Apple ID web session for this operation; an ASC
+# API key alone cannot create an app record. Set FASTLANE_USER and
+# FASTLANE_SESSION (from `fastlane spaceauth`) in the private release env.
+lane :create_store_record do
+  apple_id = ENV.fetch("FASTLANE_USER")
+  produce(
+    username: apple_id,
+    app_identifier: APP_IDENTIFIER,
+    app_name: APP_NAME,
+    app_version: APP_VERSION,
+    sku: APP_SKU,
+    platform: "ios",
+    language: "en-US",
+    team_id: TEAM_ID
+  )
+end
+
+# Archives the app with App Store distribution signing and uploads it to
+# TestFlight. The timestamp build number makes every invocation uploadable.
+lane :beta do
+  ensure_project
+  api_key = asc_api_key
+  with_env_unset("APP_STORE_CONNECT_API_KEY_PATH") do
+    match(
+      type: "appstore",
+      app_identifier: APP_IDENTIFIER,
+      api_key: api_key,
+      team_id: TEAM_ID,
+      readonly: is_ci,
+      force_legacy_encryption: true
+    )
+    increment_build_number(
+      build_number: Time.now.utc.strftime("%Y%m%d%H%M"),
+      xcodeproj: XCODEPROJ
+    )
+    build_app(
+      project: XCODEPROJ,
+      scheme: SCHEME,
+      configuration: "Release",
+      export_method: "app-store",
+      clean: true,
+      xcargs: "-skipPackagePluginValidation -skipMacroValidation"
+    )
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      skip_waiting_for_build_processing: true
+    )
+  end
+end
+
 lane :provision_device do
   api_key = asc_api_key
   with_env_unset("APP_STORE_CONNECT_API_KEY_PATH") do
     Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.from(hash: api_key)
     begin
       Spaceship::ConnectAPI::BundleId.create(
-        name: "DshApp",
-        identifier: "com.baixianger.dshios",
+        name: "DSH",
+        identifier: APP_IDENTIFIER,
         platform: "IOS"
       )
-      UI.success("Created App ID com.baixianger.dshios")
+      UI.success("Created App ID #{APP_IDENTIFIER}")
     rescue => e
       UI.message("App ID may already exist: #{e.message}")
     end
@@ -38,7 +107,7 @@ lane :provision_device do
     )
     match(
       type: "development",
-      app_identifier: "com.baixianger.dshios",
+      app_identifier: APP_IDENTIFIER,
       api_key: api_key,
       team_id: "TN7ZDD72P2",
       force_legacy_encryption: true
@@ -49,15 +118,51 @@ end
 # Uploads only the localized marketing screenshots. It never uploads a build,
 # edits listing metadata, or submits a version for review.
 lane :upload_store_screenshots do
-  upload_to_app_store(
-    api_key: asc_api_key,
-    app_identifier: "com.baixianger.dshios",
-    screenshots_path: File.expand_path("store_screenshots", __dir__),
-    overwrite_screenshots: true,
-    skip_binary_upload: true,
-    skip_metadata: true,
-    skip_app_version_update: true,
-    submit_for_review: false,
-    force: true
-  )
+  api_key = asc_api_key
+  with_env_unset("APP_STORE_CONNECT_API_KEY_PATH") do
+    upload_to_app_store(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      screenshots_path: File.expand_path("store_screenshots", __dir__),
+      # Screenshot sets are cleared explicitly before this lane runs. Keeping
+      # this false avoids a delete/upload race in App Store Connect.
+      overwrite_screenshots: false,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      skip_app_version_update: true,
+      submit_for_review: false,
+      force: true
+    )
+  end
+end
+
+# Stores the complete App Store age-rating questionnaire in source control and
+# updates only that declaration. It does not upload a build, metadata, or media.
+lane :set_age_rating do
+  api_key = asc_api_key
+  with_env_unset("APP_STORE_CONNECT_API_KEY_PATH") do
+    update_app_age_rating(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      age_rating_config_path: File.expand_path("metadata/age_rating.json", __dir__)
+    )
+  end
+end
+
+# Uploads the App Store listing URLs from fastlane/metadata without uploading a
+# binary, screenshots, or submitting a version for review.
+lane :upload_store_urls do
+  api_key = asc_api_key
+  with_env_unset("APP_STORE_CONNECT_API_KEY_PATH") do
+    upload_to_app_store(
+      api_key: api_key,
+      app_identifier: APP_IDENTIFIER,
+      metadata_path: File.expand_path("metadata", __dir__),
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_app_version_update: true,
+      submit_for_review: false,
+      force: true
+    )
+  end
 end

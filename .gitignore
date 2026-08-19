@@ -6,6 +6,10 @@ xcuserdata/
 .DS_Store
 *.log
 fastlane/.env
+fastlane/.env.*
+!fastlane/.env.example
 fastlane/report.xml
 fastlane/vendor/
+DshApp.ipa
+*.app.dSYM.zip
 .swiftpm/

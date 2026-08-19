@@ -188,10 +188,14 @@ struct ServerOnboardingFlowState: Equatable {
 struct ServerOnboardingView: View {
     @EnvironmentObject private var model: AppModel
     @Environment(\.colorScheme) private var colorScheme
-    @State private var flow = ServerOnboardingFlowState()
+    @State private var flow: ServerOnboardingFlowState
     @State private var isPairing = false
     @State private var isShowingConnections = false
     @State private var scanLineAtBottom = false
+
+    init(initialStep: ServerOnboardingStep = .server) {
+        _flow = State(initialValue: ServerOnboardingFlowState(step: initialStep))
+    }
 
     var body: some View {
         VStack(spacing: 0) {

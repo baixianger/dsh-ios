@@ -105,6 +105,20 @@ final class AppModel: ObservableObject {
     /// Used only by the App Store capture scheme. It never reaches a host and
     /// is activated explicitly with `--store-screenshot-demo <screen>`.
     private let storeScreenshotDemoScreen: String?
+    private let storeScreenshotSessionID: String?
+
+    var storeScreenshotOnboardingStep: ServerOnboardingStep? {
+        switch storeScreenshotDemoScreen {
+        case "setup-1": .server
+        case "setup-2": .network
+        case "setup-3": .pair
+        default: nil
+        }
+    }
+
+    var isStoreScreenshotDemoSession: Bool {
+        storeScreenshotDemoScreen == "session"
+    }
 
     init() {
         let arguments = ProcessInfo.processInfo.arguments
@@ -112,6 +126,11 @@ final class AppModel: ObservableObject {
             storeScreenshotDemoScreen = arguments[index + 1]
         } else {
             storeScreenshotDemoScreen = nil
+        }
+        if let index = arguments.firstIndex(of: "--store-screenshot-session"), arguments.indices.contains(index + 1) {
+            storeScreenshotSessionID = arguments[index + 1]
+        } else {
+            storeScreenshotSessionID = nil
         }
         let defaults = UserDefaults.standard
         let loadedServers: [DshServer]
@@ -155,6 +174,12 @@ final class AppModel: ObservableObject {
         await loadModelCatalog()
         await loadPermission()
         await loadPlugins()
+        if let storeScreenshotSessionID,
+           let session = sessions.first(where: { $0.sessionId == storeScreenshotSessionID }) {
+            selectedConversationId = session.sessionId
+            selectedWorkspaceId = workspaces.first(where: { $0.sessionIds.contains(session.sessionId) })?.workspaceId
+            mainPresentation = .conversation
+        }
         guard generation == connectionGeneration else { return }
         startEvents()
         updateActiveSidebarSnapshot()
@@ -187,6 +212,7 @@ final class AppModel: ObservableObject {
             servers[index].name = displayName
             if let hostID { servers[index].hostID = hostID }
             if let credentialKey { servers[index].credentialKey = credentialKey }
+            if let hostID { deduplicateServers(hostID: hostID, keeping: servers[index].id) }
             persistServers()
             activateServer(servers[index].id)
             return
@@ -197,6 +223,7 @@ final class AppModel: ObservableObject {
             servers[index].name = displayName
             servers[index].baseURLString = trimmedURL
             if let credentialKey { servers[index].credentialKey = credentialKey }
+            deduplicateServers(hostID: hostID, keeping: servers[index].id)
             persistServers()
             activateServer(servers[index].id)
             return
@@ -204,6 +231,7 @@ final class AppModel: ObservableObject {
 
         let server = DshServer(name: displayName, baseURLString: trimmedURL, hostID: hostID, credentialKey: credentialKey)
         servers.append(server)
+        if let hostID { deduplicateServers(hostID: hostID, keeping: server.id) }
         persistServers()
         activateServer(server.id)
     }
@@ -311,6 +339,17 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// A host may be reached through a new LAN/Tailnet URL after pairing. Keep
+    /// one local connection record per stable host identity so its sidebar
+    /// cache cannot diverge across duplicate routes.
+    private func deduplicateServers(hostID: String, keeping keptID: UUID) {
+        let duplicates = servers.filter { $0.id != keptID && $0.hostID == hostID }.map(\.id)
+        guard !duplicates.isEmpty else { return }
+        servers.removeAll { duplicates.contains($0.id) }
+        sidebarServers.removeAll { duplicates.contains($0.server.id) }
+        if let activeServerID, duplicates.contains(activeServerID) { self.activeServerID = keptID }
+    }
+
     func loadPlugins() async {
         do {
             let value = try await client.callRemote("pluginInventory", "list", args: .object([:]))
@@ -401,6 +440,7 @@ final class AppModel: ObservableObject {
             sessions = items.compactMap { SessionSummary(json: $0) }
             sessionsError = nil
             isOffline = false
+            updateActiveSidebarSnapshot()
         } catch {
             sessionsError = String(describing: error)
             isOffline = true
@@ -421,6 +461,7 @@ final class AppModel: ObservableObject {
             if selectedWorkspaceId == nil || !workspaces.contains(where: { $0.workspaceId == selectedWorkspaceId }) {
                 selectedWorkspaceId = workspaces.first?.workspaceId
             }
+            updateActiveSidebarSnapshot()
         } catch {
             // Refresh failures are intentionally non-fatal; mutation callers
             // still receive the original RPC error below.
@@ -791,56 +832,65 @@ final class AppModel: ObservableObject {
 
 private extension AppModel {
     func seedStoreScreenshotDemo() {
+        let isChinese = Locale.current.language.languageCode?.identifier == "zh"
+        let activeTitle = isChinese ? "准备 iOS 发布" : "Prepare the iOS release"
+        let reviewTitle = isChinese ? "检查发布队列" : "Review the deployment queue"
+        let testsTitle = isChinese ? "汇总今日测试报告" : "Summarize today’s test report"
+        let releaseWorkspace = isChinese ? "移动端发布" : "Mobile release"
+        let apiWorkspace = isChinese ? "服务端接口" : "API service"
+        let siteWorkspace = isChinese ? "产品网站" : "Product site"
+        let today = isChinese ? "今天" : "Today"
+        let yesterday = isChinese ? "昨天" : "Yesterday"
         let active = SessionSummary(json: .object([
             "sessionId": .string("release-check"),
             "updatedAt": .number(1_775_123_600),
             "running": .bool(true),
             "blank": .bool(false),
-            "cwd": .string("~/Projects/mobile-release"),
+            "cwd": .string(isChinese ? "~/项目/移动端发布" : "~/Projects/mobile-release"),
             "agentPreset": .string("code"),
-            "projections": .object(["values": .object(["title": .string("Prepare the iOS release")])]),
+            "projections": .object(["values": .object(["title": .string(activeTitle)])]),
         ]))!
         let review = SessionSummary(json: .object([
             "sessionId": .string("review-queue"),
             "updatedAt": .number(1_775_122_900),
             "running": .bool(false),
             "blank": .bool(false),
-            "cwd": .string("~/Projects/api-service"),
+            "cwd": .string(isChinese ? "~/项目/服务端接口" : "~/Projects/api-service"),
             "agentPreset": .string("standard"),
-            "projections": .object(["values": .object(["title": .string("Review the deployment queue")])]),
+            "projections": .object(["values": .object(["title": .string(reviewTitle)])]),
         ]))!
         let tests = SessionSummary(json: .object([
             "sessionId": .string("test-report"),
             "updatedAt": .number(1_775_120_100),
             "running": .bool(false),
             "blank": .bool(false),
-            "cwd": .string("~/Projects/product-site"),
+            "cwd": .string(isChinese ? "~/项目/产品网站" : "~/Projects/product-site"),
             "agentPreset": .string("minimal"),
-            "projections": .object(["values": .object(["title": .string("Summarize today’s test report")])]),
+            "projections": .object(["values": .object(["title": .string(testsTitle)])]),
         ]))!
 
         sessions = [active, review, tests]
         workspaces = [
             Workspace(json: .object([
                 "workspaceId": .string("mobile-release"),
-                "path": .string("~/Projects/mobile-release"),
-                "title": .string("Mobile release"),
+                "path": .string(isChinese ? "~/项目/移动端发布" : "~/Projects/mobile-release"),
+                "title": .string(releaseWorkspace),
                 "sessionIds": .array([.string(active.sessionId)]),
-                "updatedAt": .string("Today"),
+                "updatedAt": .string(today),
             ]))!,
             Workspace(json: .object([
                 "workspaceId": .string("api-service"),
-                "path": .string("~/Projects/api-service"),
-                "title": .string("API service"),
+                "path": .string(isChinese ? "~/项目/服务端接口" : "~/Projects/api-service"),
+                "title": .string(apiWorkspace),
                 "sessionIds": .array([.string(review.sessionId)]),
-                "updatedAt": .string("Today"),
+                "updatedAt": .string(today),
             ]))!,
             Workspace(json: .object([
                 "workspaceId": .string("product-site"),
-                "path": .string("~/Projects/product-site"),
-                "title": .string("Product site"),
+                "path": .string(isChinese ? "~/项目/产品网站" : "~/Projects/product-site"),
+                "title": .string(siteWorkspace),
                 "sessionIds": .array([.string(tests.sessionId)]),
-                "updatedAt": .string("Yesterday"),
+                "updatedAt": .string(yesterday),
             ]))!,
         ]
         agentPresets = [
@@ -864,8 +914,11 @@ private extension AppModel {
 
         switch storeScreenshotDemoScreen {
         case "sidebar":
-            mainPresentation = .workspace
+            mainPresentation = .welcome
             showSidebar = true
+        case "session":
+            mainPresentation = .workspace
+            selectedConversationId = active.sessionId
         case "settings":
             mainPresentation = .workspace
             showSettings = true

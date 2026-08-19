@@ -22,7 +22,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.baixianger.dshios.pair</string>
+			<string>me.impai.dsh.pair</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>dsh</string>
@@ -31,6 +31,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
@@ -38,6 +40,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>用于扫描 DSH 主机的一次性配对二维码</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>2026 ImPai</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>用于连接用户选择的局域网 DSH 主机</string>
 	<key>NSMicrophoneUsageDescription</key>

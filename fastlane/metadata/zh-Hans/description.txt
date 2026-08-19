@@ -1,0 +1,10 @@
+口袋海豚连接你选择的 DSH 主机，让你可以在 iPhone 和 iPad 上继续工作。
+
+• 与自己的 DSH 主机配对
+• 浏览工作区和会话
+• 阅读并继续对话
+• 在不同设备上使用同一个主机
+
+本产品免费且开源。它是 DeepSeek Harness 的非官方客户端，与 DeepSeek 无隶属关系。
+
+项目源码：https://github.com/baixianger/dsh-ios

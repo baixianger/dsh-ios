@@ -37,7 +37,7 @@ enum DshNetworkAuthError: LocalizedError {
 
 actor DshNetworkAuth {
     static let shared = DshNetworkAuth()
-    private let service = "com.baixianger.dshios.network"
+    private let service = "me.impai.dsh.network"
 
     func pair(scannedURL: URL) async throws -> (baseURL: URL, result: DshNetworkPairingResult) {
         let pairingURL = try Self.normalizedPairingURL(from: scannedURL)
@@ -143,10 +143,20 @@ actor DshNetworkAuth {
     }
 
     func remove(key: String) {
+        #if targetEnvironment(simulator)
+        UserDefaults.standard.removeObject(forKey: simulatorCredentialKey(key))
+        return
+        #endif
         SecItemDelete(query(key: key) as CFDictionary)
     }
 
     private func load(key: String) throws -> StoredNetworkCredential {
+        #if targetEnvironment(simulator)
+        guard let data = UserDefaults.standard.data(forKey: simulatorCredentialKey(key)) else {
+            throw DshNetworkAuthError.missingCredential
+        }
+        return try JSONDecoder().decode(StoredNetworkCredential.self, from: data)
+        #else
         var query = query(key: key)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -154,10 +164,14 @@ actor DshNetworkAuth {
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data else { throw DshNetworkAuthError.missingCredential }
         return try JSONDecoder().decode(StoredNetworkCredential.self, from: data)
+        #endif
     }
 
     private func save(_ credential: StoredNetworkCredential, key: String) throws {
         let data = try JSONEncoder().encode(credential)
+        #if targetEnvironment(simulator)
+        UserDefaults.standard.set(data, forKey: simulatorCredentialKey(key))
+        #else
         let base = query(key: key)
         let status = SecItemUpdate(base as CFDictionary, [kSecValueData as String: data] as CFDictionary)
         if status == errSecItemNotFound {
@@ -169,7 +183,14 @@ actor DshNetworkAuth {
         } else if status != errSecSuccess {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(status))
         }
+        #endif
     }
+
+    #if targetEnvironment(simulator)
+    private func simulatorCredentialKey(_ key: String) -> String {
+        "dsh.network.simulator.credential.\(key)"
+    }
+    #endif
 
     private func query(key: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service, kSecAttrAccount as String: key]

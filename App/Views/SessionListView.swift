@@ -95,7 +95,9 @@ struct SessionListView: View {
             .ignoresSafeArea([.container, .keyboard], edges: .vertical)
 
             Group {
-                if model.servers.isEmpty {
+                if let step = model.storeScreenshotOnboardingStep {
+                    ServerOnboardingView(initialStep: step)
+                } else if model.servers.isEmpty {
                     ServerOnboardingView()
                 } else {
                     NavigationStack {
@@ -104,6 +106,8 @@ struct SessionListView: View {
                                 Color(uiColor: .systemBackground)
                             } else if model.mainPresentation == .welcome {
                                 WelcomeView()
+                            } else if model.isStoreScreenshotDemoSession {
+                                StoreDemoSessionView()
                             } else if let cid = model.selectedConversationId {
                                 SessionDetailView(model: model.sessionModel(for: cid))
                             } else if model.selectedWorkspaceId != nil {
@@ -180,5 +184,49 @@ struct SessionListView: View {
                     drawerDragOffset = 0
                 }
             }
+    }
+}
+
+private struct StoreDemoSessionView: View {
+    @State private var draft = ""
+    private let isChinese = Locale.current.language.languageCode?.identifier == "zh"
+
+    private var userMessage: ChatItem { ChatItem(id: "store-demo-user", role: .user, text: isChinese ? "检查工作区变更，并准备一份简洁的发布摘要。" : "Review the workspace changes and prepare a concise release summary.") }
+    private var assistantMessage: ChatItem { ChatItem(id: "store-demo-assistant", role: .assistant, text: isChinese ? "我已检查工作区，并准备好发布摘要。\n\n- 商店素材已整理，等待审核\n- 配置流程已可验证\n- 隐私说明已准备最终核对" : "I reviewed the workspace and prepared the release summary.\n\n- Store assets are organized for review\n- Setup flow is ready to verify\n- Privacy copy is ready for final review") }
+    private var activity: [ChatItem] { [
+        ChatItem(id: "store-demo-read", role: .tool, text: "", toolName: isChinese ? "读取文件" : "read_file", toolArgs: isChinese ? "商店素材清单" : "Store asset manifest"),
+        ChatItem(id: "store-demo-search", role: .tool, text: "", toolName: isChinese ? "搜索文件" : "search_files", toolArgs: isChinese ? "发布说明" : "release notes"),
+        ChatItem(id: "store-demo-edit", role: .tool, text: "", toolName: isChinese ? "编辑文件" : "edit_file", toolArgs: isChinese ? "发布摘要" : "Release summary")
+    ] }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    MessageBubble(item: userMessage)
+                    ActivityGroupCard(
+                        reasoning: "I’ll inspect the workspace state, summarize the visible changes, and keep the release notes concise.",
+                        tools: activity
+                    )
+                    MessageBubble(item: assistantMessage)
+                }
+                .padding()
+            }
+
+            ComposerView(
+                draft: $draft,
+                isRunning: false,
+                modelLabel: "DeepSeek · Standard",
+                permissionLabel: permissionName("read-only"),
+                modelPickerEnabled: false,
+                submissionEnabled: false,
+                onOpenModelPicker: {},
+                onChangePermission: { _ in },
+                onSend: { _, _ in },
+                onStop: {}
+            )
+        }
+        .navigationTitle(isChinese ? "准备 iOS 发布" : "Prepare the iOS release")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

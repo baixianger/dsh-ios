@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pocket Dolphin · DSH — Store Asset Review</title>
+  <style>
+    :root { --paper:#f3f3f4; --card:#fff; --ink:#27282c; --muted:#85868c; --line:#d9d9dd; --blue:#167ff2; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--paper); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif; }
+    header { position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:20px; padding:20px clamp(20px,4vw,60px); border-bottom:1px solid var(--line); background:color-mix(in srgb,var(--paper) 92%,transparent); backdrop-filter:blur(18px); }
+    h1 { margin:0; font-size:22px; letter-spacing:-.04em; }
+    .meta { margin:4px 0 0; color:var(--muted); font-size:13px; }
+    .controls { display:flex; align-items:center; gap:9px; }
+    button { border:1px solid var(--line); border-radius:999px; padding:9px 14px; background:var(--card); color:var(--ink); font:600 13px inherit; cursor:pointer; }
+    button.active, button.primary { border-color:var(--blue); background:var(--blue); color:#fff; }
+    main { max-width:1800px; margin:0 auto; padding:30px clamp(20px,4vw,60px) 80px; }
+    .note { margin:0 0 22px; color:var(--muted); font-size:14px; }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; }
+    figure { margin:0; overflow:hidden; border:1px solid var(--line); border-radius:18px; background:var(--card); box-shadow:0 12px 35px rgba(23,24,30,.06); }
+    figure button { display:block; width:100%; padding:0; border:0; border-radius:0; background:transparent; }
+    img { display:block; width:100%; height:auto; background:#ddd; }
+    figcaption { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:13px 15px; font-size:14px; font-weight:600; }
+    figcaption span { color:var(--muted); font-size:12px; font-weight:500; }
+    dialog { width:min(94vw,1280px); max-height:94vh; padding:0; border:0; border-radius:18px; background:#17181c; }
+    dialog::backdrop { background:rgba(0,0,0,.72); }
+    dialog img { width:auto; max-width:100%; max-height:84vh; margin:auto; }
+    .dialog-bar { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; color:#fff; }
+    .dialog-bar button { color:#fff; border-color:#555; background:transparent; }
+    @media (max-width:900px) { .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } header { align-items:flex-start; flex-direction:column; } }
+    @media (max-width:560px) { .grid { grid-template-columns:1fr; } .controls { flex-wrap:wrap; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div><h1>Pocket Dolphin · DSH — Store asset review</h1><p class="meta" id="dimensions"></p></div>
+    <div class="controls">
+      <button class="active" data-locale="en-US">English</button>
+      <button data-locale="zh-Hans">简体中文</button>
+      <button class="active" data-device="iphone">iPhone</button>
+      <button data-device="ipad">iPad landscape</button>
+      <button class="primary" id="download">Export all PNGs</button>
+    </div>
+  </header>
+  <main>
+    <p class="note">Six review-safe screens. The iPhone session is a dedicated, disposable live DSH conversation with no personal data. Click any image for full-size inspection.</p>
+    <section class="grid" id="grid" aria-label="Store screenshots"></section>
+  </main>
+  <dialog id="preview"><div class="dialog-bar"><strong id="dialog-title"></strong><button onclick="preview.close()">Close</button></div><img id="dialog-image" alt=""></dialog>
+  <script>
+    const slides = [
+      ['main','Into the Unknown'], ['sidebar','Open sidebar'], ['session','Live DSH session'],
+      ['setup1','Setup — host'], ['setup2','Setup — connection'], ['setup3','Setup — pairing']
+    ];
+    const zhSlides = [
+      ['main','从未知开始'], ['sidebar','工作区侧边栏'], ['session','一段真实会话'],
+      ['setup1','配置主机'], ['setup2','选择连接'], ['setup3','安全配对']
+    ];
+    const raw = { setup1:'setup-1', setup2:'setup-2', setup3:'setup-3' };
+    const dimensions = { iphone:'1320 × 2868', ipad:'2752 × 2064' };
+    let device = 'iphone';
+    let locale = 'en-US';
+    const grid = document.getElementById('grid');
+    const preview = document.getElementById('preview');
+    const assetVersion = '20260819-zh-session-copy-v1';
+    const url = slide => `marketing/${locale}/${device}/${slide}.png?v=${assetVersion}`;
+    function render() {
+      document.getElementById('dimensions').textContent = `${device === 'iphone' ? 'iPhone' : 'iPad landscape'} · ${dimensions[device]} · ${locale}`;
+      const activeSlides = locale === 'zh-Hans' ? zhSlides : slides;
+      grid.innerHTML = activeSlides.map(([id, title], index) => `<figure><button data-id="${id}" aria-label="Preview ${title}"><img loading="lazy" src="${url(id)}" alt="${title}"></button><figcaption>${String(index + 1).padStart(2,'0')} · ${title}<span>${dimensions[device]}</span></figcaption></figure>`).join('');
+      grid.querySelectorAll('button').forEach(button => button.addEventListener('click', () => {
+        const id = button.dataset.id; document.getElementById('dialog-title').textContent = activeSlides.find(s => s[0] === id)[1];
+        document.getElementById('dialog-image').src = url(id); preview.showModal();
+      }));
+    }
+    document.querySelectorAll('[data-device]').forEach(button => button.addEventListener('click', () => {
+      device = button.dataset.device; document.querySelectorAll('[data-device]').forEach(b => b.classList.toggle('active', b === button)); render();
+    }));
+    document.querySelectorAll('[data-locale]').forEach(button => button.addEventListener('click', () => {
+      locale = button.dataset.locale;
+      document.querySelectorAll('[data-locale]').forEach(b => b.classList.toggle('active', b === button));
+      document.querySelectorAll('[data-device]').forEach(b => b.classList.toggle('active', b.dataset.device === device));
+      render();
+    }));
+    document.getElementById('download').addEventListener('click', () => (locale === 'zh-Hans' ? zhSlides : slides).forEach(([id], index) => setTimeout(() => {
+      const link = document.createElement('a'); link.href = url(id); link.download = `dsh-remote-${locale}-${device}-${String(index + 1).padStart(2,'0')}-${id}.png`; link.click();
+    }, index * 180)));
+    render();
+  </script>
+</body>
+</html>
