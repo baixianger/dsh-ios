@@ -23,5 +23,8 @@ device frames only as presentation around the real pixels.
 5. Hand off to `apple-app-release` for profile selection and the transactional
    ASC upload/read-back verification.
 
+For the web preview/slideshow and canonical asset layout, read
+`references/web-preview-and-assets.md`.
+
 Do not draw device bezels by hand, invent fake in-app content when a controlled
 real session can be captured, or mix superseded assets with the export set.
