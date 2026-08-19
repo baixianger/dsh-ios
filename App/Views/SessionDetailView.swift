@@ -6,33 +6,72 @@ struct SessionDetailView: View {
     @State private var showModelPicker = false
     @State private var showWork = false
     @State private var showStats = false
-    @State private var showTrajectory = false
+    @State private var editingMessageId: String?
+    @State private var editingText = ""
+    @State private var showEdit = false
     @State private var noteTarget: String? = nil
     @State private var noteText = ""
-    @State private var pendingPermission: String?
 
     init(model: SessionModel) {
         self.model = model
     }
 
     private var modelLabel: String {
-        var name = model.currentModelName ?? String(localized: "模型")
-        let group = model.modelGroups.first { $0.id == model.currentProvider }
-        if let selected = group?.models.first(where: { $0.id == model.currentModelName }) {
-            name = selected.name
-            guard let reasoning = selected.reasoning else { return name }
-            let effectiveEffort = model.currentEffort ?? reasoning.defaultEffort
-            let effortName = effectiveEffort.flatMap { id in
-                reasoning.efforts.first(where: { $0.id == id })?.name ?? effortLabel(id)
-            } ?? String(localized: "提供商默认")
-            return name + " · " + effortName
+        var name = model.currentModelName ?? "模型"
+        if let m = model.modelGroups.flatMap({ $0.models }).first(where: { $0.id == model.currentModelName }) {
+            name = m.name
+        }
+        if let e = model.currentEffort, !e.isEmpty {
+            return name + " · " + effortLabel(e)
         }
         return name
     }
 
-    private var presetLabel: String? {
-        guard let id = model.summary?.agentPreset else { return nil }
-        return appModel.agentPresets.first(where: { $0.id == id })?.displayName ?? id
+    private struct TimelineGroup: Identifiable {
+        let id: String
+        let message: ChatItem?
+        let reasoning: String?
+        let tools: [ChatItem]
+    }
+
+    private var groupedItems: [TimelineGroup] {
+        var result: [TimelineGroup] = []
+        var index = 0
+
+        while index < model.items.count {
+            let item = model.items[index]
+            if item.role == .assistant,
+               let reasoning = item.reasoning,
+               !reasoning.isEmpty {
+                var tools: [ChatItem] = []
+                var toolIndex = index + 1
+                while toolIndex < model.items.count, model.items[toolIndex].role == .tool {
+                    tools.append(model.items[toolIndex])
+                    toolIndex += 1
+                }
+                if !tools.isEmpty {
+                    result.append(TimelineGroup(id: "activity-\(item.id)", message: item, reasoning: reasoning, tools: tools))
+                    index = toolIndex
+                    continue
+                }
+            }
+
+            if item.role == .tool {
+                var tools = [item]
+                var toolIndex = index + 1
+                while toolIndex < model.items.count, model.items[toolIndex].role == .tool {
+                    tools.append(model.items[toolIndex])
+                    toolIndex += 1
+                }
+                result.append(TimelineGroup(id: "tools-\(item.id)", message: nil, reasoning: nil, tools: tools))
+                index = toolIndex
+                continue
+            }
+
+            result.append(TimelineGroup(id: item.id, message: item, reasoning: nil, tools: []))
+            index += 1
+        }
+        return result
     }
 
     var body: some View {
@@ -50,20 +89,29 @@ struct SessionDetailView: View {
                 .background(Color.dsAccentBlue.opacity(0.12))
             }
 
+            GoalCard(model: model)
+
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 6) {
+                    LazyVStack(alignment: .leading, spacing: 12) {
                         if model.isLoading {
                             ProgressView().frame(maxWidth: .infinity).padding(.top, 24)
                         }
-                        ForEach(model.transcriptEntries) { entry in
-                            transcriptRow(for: entry)
+                        ForEach(groupedItems) { group in
+                            if let message = group.message {
+                                messageRow(message, showsReasoning: group.reasoning == nil)
+                            }
+                            if let reasoning = group.reasoning, !group.tools.isEmpty {
+                                ReasoningToolGroupCard(reasoning: reasoning, items: group.tools)
+                            } else if !group.tools.isEmpty {
+                                ToolCallGroupCard(items: group.tools)
+                            }
                         }
                     }
                     .padding()
                 }
                 .onChange(of: model.items.count) { _, _ in
-                    if let last = model.transcriptEntries.last {
+                    if let last = groupedItems.last {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
                 }
@@ -80,42 +128,13 @@ struct SessionDetailView: View {
                 .padding(.bottom, 8)
             }
 
-            if !model.jobs.isEmpty || !model.subagents.isEmpty {
-                WorkStatusStrip(
-                    jobs: model.jobs,
-                    subagents: model.subagents,
-                    onOpen: { showWork = true }
-                )
-            }
-
-            GoalCard(model: model)
-
-            if let error = model.commandError {
-                Text("命令加载失败：\(error)")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if let error = model.sendError {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
             ComposerView(
                 draft: $model.draft,
                 isRunning: model.isRunning,
                 modelLabel: modelLabel,
-                permissionLabel: model.permissionPreset.map(permissionName) ?? appModel.permissionPreset.map(permissionName) ?? String(localized: "权限"),
-                commands: model.commands,
+                permissionLabel: appModel.permissionPreset.map(permissionName) ?? "权限",
                 onOpenModelPicker: { showModelPicker = true },
-                onChangePermission: { preset in
-                    if preset == "danger-full-access" { pendingPermission = preset }
-                    else { Task { await model.setPermission(preset) } }
-                },
+                onChangePermission: { preset in Task { await appModel.setPermission(preset) } },
                 onSend: { image, text in
                     var imagePart: (data: String, mediaType: String)?
                     if let image, let jpeg = image.jpegData(compressionQuality: 0.8) {
@@ -127,25 +146,24 @@ struct SessionDetailView: View {
         }
         .frame(maxWidth: 760)
         .frame(maxWidth: .infinity)
+        .background(Color.dsBackground)
         .navigationTitle(model.summary?.title ?? "会话")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Button("会话统计", systemImage: "info.circle") {
-                    showStats = true
-                }
-                .labelStyle(.iconOnly)
-
+                Button { showStats = true } label: { circleIcon("info") }
                 Menu {
-                    if let preset = presetLabel {
-                        Label("模式：\(preset)", systemImage: "point.3.connected.trianglepath.dotted")
+                    Menu("模式") {
+                        ForEach(appModel.agentPresets) { p in
+                            Button(p.displayName) {
+                                Task { await appModel.selectAgentPreset(sessionId: model.sessionId, preset: p.id) }
+                            }
+                        }
                     }
                     Button { showModelPicker = true } label: { Label("模型", systemImage: "cpu") }
                     Button { showWork = true } label: { Label("工作", systemImage: "briefcase") }
-                    Button { showTrajectory = true } label: { Label("轨迹", systemImage: "point.3.connected.trianglepath.dotted") }
                 } label: {
-                    Label("更多", systemImage: "ellipsis")
-                        .labelStyle(.iconOnly)
+                    circleIcon("ellipsis")
                 }
             }
         }
@@ -153,22 +171,6 @@ struct SessionDetailView: View {
         .sheet(isPresented: $showModelPicker) { ModelPickerSheet(model: model) }
         .sheet(isPresented: $showWork) { WorkSheet(model: model) }
         .sheet(isPresented: $showStats) { StatsSheet(model: model) }
-        .sheet(isPresented: $showTrajectory) { TrajectorySheet(model: model) }
-        .alert("确认完整访问权限", isPresented: Binding(get: { pendingPermission != nil }, set: { if !$0 { pendingPermission = nil } })) {
-            Button("取消", role: .cancel) { pendingPermission = nil }
-            Button("确认", role: .destructive) {
-                if let preset = pendingPermission { Task { await model.setPermission(preset) } }
-                pendingPermission = nil
-            }
-        } message: {
-            Text("完整访问权限允许会话读写工作区外的文件并执行高风险操作。")
-        }
-        .alert("会话操作失败", isPresented: Binding(get: { model.permissionError != nil }, set: { if !$0 { model.permissionError = nil } })) {
-            Button("好", role: .cancel) { model.permissionError = nil }
-        } message: { Text(model.permissionError ?? "未知错误") }
-        .alert("会话操作失败", isPresented: Binding(get: { model.operationError != nil }, set: { if !$0 { model.operationError = nil } })) {
-            Button("好", role: .cancel) { model.operationError = nil }
-        } message: { Text(model.operationError ?? "未知错误") }
         .sheet(isPresented: Binding(get: { noteTarget != nil }, set: { if !$0 { noteTarget = nil } })) {
             NavigationStack {
                 Form {
@@ -190,124 +192,71 @@ struct SessionDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $showEdit) {
+            NavigationStack {
+                Form {
+                    TextField("消息", text: $editingText, axis: .vertical)
+                        .lineLimit(2...8)
+                }
+                .navigationTitle("编辑消息")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("取消") { showEdit = false } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("保存") {
+                            if let id = editingMessageId {
+                                Task { await model.editMessage(messageId: id, text: editingText) }
+                            }
+                            showEdit = false
+                        }
+                    }
+                }
+            }
+        }
         .task {
             await model.loadHistory()
             await model.loadModels()
             await model.loadSubagents()
             await model.loadSkills()
             await model.loadFeedback()
-            await model.loadCommands()
         }
     }
 
-    private var branchableEntryId: String? {
-        model.transcriptEntries.reversed().first { entry in
-            guard case .message(let item) = entry else { return false }
-            return item.role == .assistant && !item.isStreaming && !item.text.isEmpty
-        }?.id
-    }
-
-    private func transcriptRow(for entry: TranscriptEntry) -> some View {
-        let messageId = entry.message?.messageId
-        let feedback = messageId.flatMap { model.feedbackByMessage[$0] }
-        let branchAction: (() -> Void)? = entry.id == branchableEntryId
-            ? { Task { await appModel.forkSession(sessionId: model.sessionId) } }
-            : nil
-
-        return TranscriptRow(
-            entry: entry,
-            feedback: feedback,
-            onToggleFeedback: { messageId, rating in
-                Task { await model.toggleFeedback(messageId: messageId, rating: rating) }
+    @ViewBuilder
+    private func messageRow(_ item: ChatItem, showsReasoning: Bool = true) -> some View {
+        MessageBubble(
+            item: item,
+            showsReasoning: showsReasoning,
+            feedback: model.feedbackByMessage[item.messageId ?? ""],
+            onRemoveMessage: { mid in
+                Task { await model.removeMessage(messageId: mid) }
             },
-            onEditFeedbackNote: { messageId in
-                noteTarget = messageId
-                noteText = model.feedbackByMessage[messageId]?.note ?? ""
+            onEditMessage: { mid, text in
+                editingMessageId = mid
+                editingText = text
+                showEdit = true
             },
-            onBranch: branchAction
+            onSteerMessage: { mid in
+                Task { await model.steerMessage(messageId: mid) }
+            },
+            onToggleFeedback: { rating in
+                if let mid = item.messageId {
+                    Task { await model.toggleFeedback(messageId: mid, rating: rating) }
+                }
+            },
+            onEditFeedbackNote: { mid in
+                noteTarget = mid
+                noteText = model.feedbackByMessage[mid]?.note ?? ""
+            }
         )
     }
 
-}
-
-private struct WorkStatusStrip: View {
-    let jobs: [JobView]
-    let subagents: [SubagentEntry]
-    let onOpen: () -> Void
-
-    private var runningJobs: Int {
-        jobs.lazy.filter { $0.status == "running" }.count
-    }
-
-    private var activeSubagents: Int {
-        subagents.lazy.filter { !$0.isDiagnostic && $0.activity == "running" }.count
-    }
-
-    private var availableSubagents: Int {
-        subagents.lazy.filter { !$0.isDiagnostic }.count
-    }
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                if runningJobs > 0 {
-                    statusButton(
-                        title: "\(runningJobs) 个后台任务",
-                        systemImage: "circle.dotted"
-                    )
-                }
-                if availableSubagents > 0 {
-                    statusButton(
-                        title: activeSubagents > 0
-                            ? "\(activeSubagents) 个子代理运行中"
-                            : "\(availableSubagents) 个子代理",
-                        systemImage: "cpu"
-                    )
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 4)
-        }
-    }
-
-    private func statusButton(title: String, systemImage: String) -> some View {
-        Button(action: onOpen) {
-            Label(title, systemImage: systemImage)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 34)
-                .background(.thinMaterial, in: Capsule())
-                .overlay(Capsule().stroke(Color.secondary.opacity(0.14), lineWidth: 0.5))
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-private struct TranscriptRow: View {
-    let entry: TranscriptEntry
-    let feedback: MessageFeedbackItem?
-    let onToggleFeedback: (String, String) -> Void
-    let onEditFeedbackNote: (String) -> Void
-    let onBranch: (() -> Void)?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            switch entry {
-            case .message(let item):
-                MessageBubble(
-                    item: item,
-                    feedback: feedback,
-                    onToggleFeedback: { rating in
-                        guard let messageId = item.messageId else { return }
-                        onToggleFeedback(messageId, rating)
-                    },
-                    onEditFeedbackNote: onEditFeedbackNote,
-                    onBranch: onBranch
-                )
-            case .activity(_, let reasoning, let tools):
-                ActivityGroupCard(reasoning: reasoning, tools: tools)
-            }
-        }
+    private func circleIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 16, weight: .medium))
+            .foregroundStyle(.primary)
+            .frame(width: 44, height: 44)
+            .background(Color.dsSurfaceElevated, in: Circle())
+            .overlay(Circle().stroke(Color.dsHairline.opacity(0.7), lineWidth: 0.5))
     }
 }

@@ -29,6 +29,9 @@ extension Color {
 
     // Adaptive surfaces (light ≈ systemGray, dark ≈ spec tokens)
     static let dsSurfacePrimary = Color(light: 0xF2F2F7, dark: 0x202022)
+    static let dsSurfaceSecondary = Color(light: 0xEDEDF0, dark: 0x1C1C1E)
     static let dsSurfaceElevated = Color(light: 0xFFFFFF, dark: 0x29292B)
     static let dsSurfaceSelected = Color(light: 0xE5E5EA, dark: 0x242426)
+    static let dsBackground = Color(light: 0xF7F7F8, dark: 0x000000)
+    static let dsHairline = Color(light: 0xD7D7DC, dark: 0x2C2C2E)
 }

@@ -6,5 +6,6 @@ struct RootView: View {
     var body: some View {
         SessionListView()
             .tint(Color.dsAccentBlue)
+            .background(Color.dsBackground)
     }
 }

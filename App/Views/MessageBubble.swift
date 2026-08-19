@@ -1,13 +1,35 @@
 import SwiftUI
 import UIKit
-import Foundation
 
 struct MessageBubble: View {
     let item: ChatItem
+    let showsReasoning: Bool
     var feedback: MessageFeedbackItem? = nil
+    var onRemoveMessage: ((String) -> Void)? = nil
+    var onEditMessage: ((String, String) -> Void)? = nil
+    var onSteerMessage: ((String) -> Void)? = nil
     var onToggleFeedback: ((String) -> Void)? = nil
     var onEditFeedbackNote: ((String) -> Void)? = nil
-    var onBranch: (() -> Void)? = nil
+
+    init(
+        item: ChatItem,
+        showsReasoning: Bool = true,
+        feedback: MessageFeedbackItem? = nil,
+        onRemoveMessage: ((String) -> Void)? = nil,
+        onEditMessage: ((String, String) -> Void)? = nil,
+        onSteerMessage: ((String) -> Void)? = nil,
+        onToggleFeedback: ((String) -> Void)? = nil,
+        onEditFeedbackNote: ((String) -> Void)? = nil
+    ) {
+        self.item = item
+        self.showsReasoning = showsReasoning
+        self.feedback = feedback
+        self.onRemoveMessage = onRemoveMessage
+        self.onEditMessage = onEditMessage
+        self.onSteerMessage = onSteerMessage
+        self.onToggleFeedback = onToggleFeedback
+        self.onEditFeedbackNote = onEditFeedbackNote
+    }
 
     var body: some View {
         Group {
@@ -24,6 +46,38 @@ struct MessageBubble: View {
             case .notice:
                 Text(item.text).font(.caption).foregroundStyle(.secondary)
             }
+            }
+        }
+        .contextMenu {
+            if !item.text.isEmpty {
+                Button {
+                    UIPasteboard.general.string = item.text
+                } label: {
+                    Label("复制", systemImage: "doc.on.doc")
+                }
+            }
+            if let mid = item.messageId {
+                if let onEditMessage {
+                    Button {
+                        onEditMessage(mid, item.text)
+                    } label: {
+                        Label("编辑", systemImage: "pencil")
+                    }
+                }
+                if let onSteerMessage {
+                    Button {
+                        onSteerMessage(mid)
+                    } label: {
+                        Label("重新生成", systemImage: "arrow.clockwise")
+                    }
+                }
+                if let onRemoveMessage {
+                    Button(role: .destructive) {
+                        onRemoveMessage(mid)
+                    } label: {
+                        Label("删除消息", systemImage: "trash")
+                    }
+                }
             }
         }
     }
@@ -48,24 +102,21 @@ struct MessageBubble: View {
     }
 
     private var userBubble: some View {
-        VStack(alignment: .trailing, spacing: 3) {
-            HStack {
-                Spacer(minLength: 48)
-                Text(item.text)
-                    .font(.body)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(Color.dsSurfacePrimary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .frame(maxWidth: 300, alignment: .trailing)
-            }
-            messageActionsMenu(includesCopy: true)
+        HStack {
+            Spacer(minLength: 48)
+            Text(item.text)
+                .font(.body)
+                .textSelection(.enabled)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Color.dsSurfacePrimary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .frame(maxWidth: 300, alignment: .trailing)
         }
     }
 
     private var assistantBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let reasoning = item.reasoning, !reasoning.isEmpty {
+            if showsReasoning, let reasoning = item.reasoning, !reasoning.isEmpty {
                 ReasoningDisclosure(text: reasoning)
             }
             if item.text.isEmpty {
@@ -93,47 +144,31 @@ struct MessageBubble: View {
                     } label: {
                         Label("复制", systemImage: "doc.on.doc")
                     }
-                    .labelStyle(.iconOnly)
                     if item.messageId != nil, let onToggleFeedback {
                         Button {
                             onToggleFeedback("positive")
                         } label: {
                             Label(feedback?.rating == "positive" ? "已赞" : "赞", systemImage: feedback?.rating == "positive" ? "hand.thumbsup.fill" : "hand.thumbsup")
                         }
-                        .labelStyle(.iconOnly)
                         Button {
                             onToggleFeedback("negative")
                         } label: {
                             Label(feedback?.rating == "negative" ? "已踩" : "踩", systemImage: feedback?.rating == "negative" ? "hand.thumbsdown.fill" : "hand.thumbsdown")
                         }
-                        .labelStyle(.iconOnly)
                         if let fb = feedback, !fb.rating.isEmpty, let onEditFeedbackNote {
                             Button {
                                 onEditFeedbackNote(fb.messageId)
                             } label: {
                                 Label(fb.note == nil ? "补充说明" : "备注", systemImage: fb.note == nil ? "text.bubble" : "text.bubble.fill")
                             }
-                            .labelStyle(.iconOnly)
                         }
                     }
-                    if let onBranch {
-                        Button(action: onBranch) {
-                            Label {
-                                Text("在新对话中分支")
-                            } icon: {
-                                Image("DSHBranch")
-                                    .renderingMode(.template)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 16, height: 16)
-                            }
-                        }
-                        .labelStyle(.iconOnly)
-                    }
+                    SpeakButton(text: item.text)
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
 
                 if let note = feedback?.note, !note.isEmpty {
                     Text(note)
@@ -146,23 +181,17 @@ struct MessageBubble: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+}
 
-    @ViewBuilder
-    private func messageActionsMenu(includesCopy: Bool) -> some View {
-        if includesCopy && !item.text.isEmpty {
-            Menu {
-                Button("复制", systemImage: "doc.on.doc") {
-                    UIPasteboard.general.string = item.text
-                }
-            } label: {
-                Label("更多消息操作", systemImage: "ellipsis")
-                    .labelStyle(.iconOnly)
-                    .frame(width: 32, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .buttonStyle(.plain)
+struct SpeakButton: View {
+    let text: String
+    @StateObject private var reader = SpeechReader()
+
+    var body: some View {
+        Button {
+            reader.toggle(text)
+        } label: {
+            Label(reader.isSpeaking ? "停止" : "朗读", systemImage: reader.isSpeaking ? "stop.circle" : "speaker.wave.2")
         }
     }
 }
@@ -172,23 +201,19 @@ struct ReasoningDisclosure: View {
     @State private var expanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.16)) { expanded.toggle() }
-            } label: {
-                compactDisclosureLabel(title: String(localized: "思考过程"), systemImage: "brain", expanded: expanded)
-            }
-            .buttonStyle(.plain)
-            .accessibilityValue(expanded ? "已展开" : "已折叠")
-
-            if expanded {
-                MarkdownText(text: text)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 24)
-                    .padding(.bottom, 8)
-            }
+        DisclosureGroup(isExpanded: $expanded) {
+            MarkdownText(text: text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 10)
+                .padding(.top, 6)
+        } label: {
+            Label("思考过程", systemImage: "brain")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
         }
+        .padding(10)
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -202,25 +227,19 @@ struct ToolCallCard: View {
                 withAnimation { expanded.toggle() }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: activityIcon)
+                    Image(systemName: item.isToolResult ? "arrow.turn.down.left" : "wrench.and.screwdriver")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .frame(width: 16)
-                    Text(activityTitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Text(item.isToolResult ? (item.toolName ?? "结果") : (item.toolName ?? "tool"))
+                        .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                     Spacer()
-                    Image(systemName: "chevron.right")
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
                 }
-                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(activityTitle)
-            .accessibilityValue(expanded ? "已展开" : "已折叠")
 
             if expanded {
                 if let read = item.readCard {
@@ -239,266 +258,91 @@ struct ToolCallCard: View {
                 }
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-    }
-
-    private var activityTitle: String {
-        let fallback = item.isToolResult ? "工具结果" : "工具调用"
-        guard let name = item.toolName, !name.isEmpty else { return fallback }
-        return name
-    }
-
-    private var activityIcon: String {
-        let name = (item.toolName ?? "").lowercased()
-        if item.readCard != nil || name.contains("read") { return "book" }
-        if item.diffCard != nil || name.contains("patch") || name.contains("edit") { return "doc.badge.gearshape" }
-        if name.contains("plan") { return "list.bullet.clipboard" }
-        if name.contains("exec") || name.contains("command") || name.contains("shell") { return "terminal" }
-        return item.isToolResult ? "arrow.turn.down.left" : "wrench.and.screwdriver"
+        .padding(10)
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15), lineWidth: 0.5))
     }
 }
 
-struct ActivityGroupCard: View {
-    let reasoning: String?
-    let tools: [ChatItem]
+struct ToolCallGroupCard: View {
+    let items: [ChatItem]
     @State private var expanded = false
-
-    private var rows: [CompactToolActivity] {
-        var result: [CompactToolActivity] = []
-        for item in tools {
-            if item.isToolResult, let index = result.indices.last, result[index].result == nil {
-                result[index].result = item
-            } else {
-                result.append(CompactToolActivity(call: item, result: nil))
-            }
-        }
-        return result
-    }
-
-    private var summary: String {
-        let calls = rows.map(\.call)
-        guard !calls.isEmpty else { return String(localized: "思考过程") }
-
-        var reads = 0
-        var searches = 0
-        var edits = 0
-        var commands = 0
-        var others = 0
-        for call in calls {
-            let name = (call.toolName ?? "").localizedLowercase
-            if call.readCard != nil || name.contains("read") || name.contains("view") {
-                reads += 1
-            } else if name.contains("search") || name.contains("find") || name.contains("grep") {
-                searches += 1
-            } else if call.diffCard != nil || name.contains("edit") || name.contains("patch") || name.contains("write") {
-                edits += 1
-            } else if name.contains("exec") || name.contains("shell") || name.contains("command") || name.contains("bash") || name == "run_code" {
-                commands += 1
-            } else {
-                others += 1
-            }
-        }
-
-        let isChinese = Locale.current.language.languageCode?.identifier.hasPrefix("zh") == true
-        var parts: [String] = []
-        if isChinese {
-            if edits > 0 { parts.append("编辑 \(edits) 个文件") }
-            if reads > 0 { parts.append("读取 \(reads) 个文件") }
-            if searches > 0 { parts.append("搜索 \(searches) 次") }
-            if commands > 0 { parts.append("运行 \(commands) 条命令") }
-            if others > 0 { parts.append("调用 \(others) 个工具") }
-        } else {
-            if edits > 0 { parts.append("Edited \(edits) file\(edits == 1 ? "" : "s")") }
-            if reads > 0 { parts.append("read \(reads) file\(reads == 1 ? "" : "s")") }
-            if searches > 0 { parts.append("\(searches) search\(searches == 1 ? "" : "es")") }
-            if commands > 0 { parts.append("ran \(commands) command\(commands == 1 ? "" : "s")") }
-            if others > 0 { parts.append("used \(others) tool\(others == 1 ? "" : "s")") }
-        }
-        return parts.joined(separator: isChinese ? "，" : ", ")
-    }
-
-    private var summaryIcon: String {
-        let names = rows.map { ($0.call.toolName ?? "").localizedLowercase }.joined(separator: " ")
-        if names.contains("edit") || names.contains("patch") || names.contains("write") { return "pencil" }
-        if names.contains("search") || names.contains("find") || names.contains("grep") { return "magnifyingglass" }
-        if names.contains("read") || names.contains("view") { return "book" }
-        if reasoning != nil && rows.isEmpty { return "brain" }
-        return "terminal"
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    expanded.toggle()
-                }
+                withAnimation { expanded.toggle() }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: summaryIcon)
-                        .font(.subheadline)
-                        .frame(width: 18)
-                    Text(summary)
-                        .font(.subheadline)
-                        .lineLimit(1)
+                    Image(systemName: "wrench.and.screwdriver").font(.caption).foregroundStyle(.secondary)
+                    Text("工具调用").font(.subheadline.weight(.semibold))
+                    Text("· \(items.count)").font(.caption).foregroundStyle(.secondary)
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.caption2).foregroundStyle(.tertiary)
                 }
-                .foregroundStyle(.secondary)
-                .frame(minHeight: 30)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(summary)
-            .accessibilityValue(expanded ? "已展开" : "已折叠")
+            .padding(10)
 
             if expanded {
-                VStack(alignment: .leading, spacing: 0) {
-                    if let reasoning, !reasoning.isEmpty {
-                        CompactReasoningRow(text: reasoning)
-                    }
-
-                    ForEach(rows) { row in
-                        CompactToolActivityRow(activity: row)
-                    }
+                Divider()
+                ForEach(items) { item in
+                    ToolCallCard(item: item)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .padding(8)
             }
         }
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15), lineWidth: 0.5))
     }
 }
 
-private struct CompactToolActivity: Identifiable {
-    let id: String
-    let call: ChatItem
-    var result: ChatItem?
-
-    init(call: ChatItem, result: ChatItem?) {
-        self.id = call.id
-        self.call = call
-        self.result = result
-    }
-}
-
-private struct CompactReasoningRow: View {
-    let text: String
+struct ReasoningToolGroupCard: View {
+    let reasoning: String
+    let items: [ChatItem]
     @State private var expanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.16)) { expanded.toggle() }
+                withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
             } label: {
-                compactDisclosureLabel(title: String(localized: "思考过程"), systemImage: "brain", expanded: expanded)
+                HStack(spacing: 6) {
+                    Image(systemName: "brain")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("思考与工具调用")
+                        .font(.subheadline.weight(.semibold))
+                    Text("· (items.count)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityValue(expanded ? "已展开" : "已折叠")
+            .padding(10)
+            .accessibilityLabel(expanded ? "收起思考与工具调用" : "展开思考与工具调用")
 
             if expanded {
-                MarkdownText(text: text)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 24)
-                    .padding(.bottom, 8)
-            }
-        }
-    }
-}
-
-private struct CompactToolActivityRow: View {
-    let activity: CompactToolActivity
-    @State private var expanded = false
-
-    private var detailText: String {
-        let resultText = activity.result?.text ?? ""
-        if !resultText.isEmpty { return resultText }
-        return activity.call.toolArgs ?? activity.call.text
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.16)) { expanded.toggle() }
-            } label: {
-                compactDisclosureLabel(title: title, systemImage: icon, expanded: expanded)
-            }
-            .buttonStyle(.plain)
-            .accessibilityValue(expanded ? "已展开" : "已折叠")
-
-            if expanded {
-                if let read = activity.result?.readCard ?? activity.call.readCard {
-                    ReadCardView(card: read).padding(.leading, 24).padding(.bottom, 8)
-                } else if let diff = activity.result?.diffCard ?? activity.call.diffCard {
-                    DiffCardView(card: diff).padding(.leading, 24).padding(.bottom, 8)
-                } else if !detailText.isEmpty {
-                    Text(detailText)
-                        .font(.caption.monospaced())
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    MarkdownText(text: reasoning)
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.leading, 24)
-                        .padding(.bottom, 8)
+                    ForEach(items) { item in
+                        ToolCallCard(item: item)
+                    }
                 }
+                .padding(8)
             }
         }
+        .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.secondary.opacity(0.15), lineWidth: 0.5))
     }
-
-    private var title: String {
-        let name = activity.call.toolName ?? (activity.call.isToolResult ? "工具结果" : "工具调用")
-        if let description = decodedArgument("description"), !description.isEmpty {
-            let prefix = commandLike ? String(localized: "运行") : name
-            return "\(prefix)  \(description)"
-        }
-        let arguments = (activity.call.toolArgs ?? "")
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !arguments.isEmpty else { return name }
-        return "\(name)  \(arguments)"
-    }
-
-    private var commandLike: Bool {
-        let name = (activity.call.toolName ?? "").localizedLowercase
-        return name == "run_code" || name.contains("exec") || name.contains("shell") || name.contains("command") || name.contains("bash")
-    }
-
-    private func decodedArgument(_ key: String) -> String? {
-        guard let arguments = activity.call.toolArgs,
-              let data = arguments.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-        else { return nil }
-        return object[key] as? String
-    }
-
-    private var icon: String {
-        let name = (activity.call.toolName ?? "").localizedLowercase
-        if activity.result?.readCard != nil || activity.call.readCard != nil || name.contains("read") { return "book" }
-        if activity.result?.diffCard != nil || activity.call.diffCard != nil || name.contains("edit") || name.contains("patch") { return "pencil" }
-        if name.contains("search") || name.contains("find") || name.contains("grep") { return "magnifyingglass" }
-        if commandLike { return "terminal" }
-        return "wrench.and.screwdriver"
-    }
-}
-
-@ViewBuilder
-private func compactDisclosureLabel(
-    title: String,
-    systemImage: String,
-    expanded: Bool
-) -> some View {
-    HStack(spacing: 6) {
-        Image(systemName: systemImage)
-            .frame(width: 18)
-        Text(title)
-            .lineLimit(1)
-        Spacer(minLength: 4)
-        Image(systemName: "chevron.right")
-            .font(.caption2)
-            .rotationEffect(.degrees(expanded ? 90 : 0))
-    }
-    .font(.subheadline)
-    .foregroundStyle(.secondary)
-    .frame(height: 30)
-    .contentShape(Rectangle())
 }
